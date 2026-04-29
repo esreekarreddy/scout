@@ -1,26 +1,196 @@
 @import "tailwindcss";
 
+/* ─── tokens ───────────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas:        #f4f5f2;
+  --surface:       #ffffff;
+  --surface-2:     #ecefea;
+  --border:        #d8ded4;
+  --border-strong: #9da795;
+  --ink:           #151813;
+  --ink-2:         #566051;
+  --ink-3:         #858f7e;
+  --blue:          #145d74;
+  --blue-surface:  #e4f2f3;
+  --blue-border:   #9bcbd0;
+  --green:         #1d7c4d;
+  --green-surface: #e9f5ec;
+  --green-border:  #a8d4b8;
+  --amber:         #9f5c00;
+  --amber-surface: #fff4d9;
+  --amber-border:  #e6c069;
+  --red:           #b3261e;
+  --red-surface:   #fae8e5;
+  --red-border:    #dfaaa5;
+  --font-ui:       -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, ui-sans-serif, sans-serif;
+  --font-mono:     "SFMono-Regular", "Cascadia Code", "Roboto Mono", ui-monospace, monospace;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas:        var(--canvas);
+  --color-surface:       var(--surface);
+  --color-surface-2:     var(--surface-2);
+  --color-border:        var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-ink:           var(--ink);
+  --color-ink-2:         var(--ink-2);
+  --color-ink-3:         var(--ink-3);
+  --color-blue:          var(--blue);
+  --color-blue-surface:  var(--blue-surface);
+  --color-green:         var(--green);
+  --color-green-surface: var(--green-surface);
+  --color-amber:         var(--amber);
+  --color-amber-surface: var(--amber-surface);
+  --color-red:           var(--red);
+  --color-red-surface:   var(--red-surface);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── base ─────────────────────────────────────────────────────────── */
+html, body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    linear-gradient(rgba(21, 24, 19, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 24, 19, 0.035) 1px, transparent 1px),
+    var(--canvas);
+  background-size: 28px 28px;
+}
+
+h1, h2, h3, p {
+  letter-spacing: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.row-button:hover,
+.row-button:focus-visible,
+.agent-finding-button:hover,
+.agent-finding-button:focus-visible {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  outline: none;
+}
+
+.row-button:focus-visible,
+.agent-finding-button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--blue);
+}
+
+/* ─── animations ────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+.anim-fade-up   { animation: fade-up  0.5s cubic-bezier(0.22,1,0.36,1) both; }
+.anim-fade-in   { animation: fade-in  0.4s ease both; }
+.spin-slow      { animation: spin-slow 1.4s linear infinite; }
+.pulse-dot      { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+/* ─── scrollbar ─────────────────────────────────────────────────────── */
+.scroll-thin::-webkit-scrollbar { width: 4px; }
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+/* ─── card ──────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(21, 24, 19, 0.04);
+}
+
+/* ─── badge ─────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge-critical { background: var(--red-surface);   color: var(--red);   border: 1px solid var(--red-border);   }
+.badge-warning  { background: var(--amber-surface); color: var(--amber); border: 1px solid var(--amber-border); }
+.badge-info     { background: var(--blue-surface);  color: var(--blue);  border: 1px solid var(--blue-border);  }
+
+/* ─── btn ────────────────────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 7px;
+  background: var(--blue);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.92; }
+.btn-primary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 500;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-ghost:hover { border-color: var(--border-strong); color: var(--ink); }
+.btn-ghost:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+button, input, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
