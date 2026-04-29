@@ -63,7 +63,7 @@ export function AgentCard({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {agent.findings.length > 0 && (
-              <span style={{ fontSize: 12, fontWeight: 600, color: dotColor[agent.status] }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: dotColor[agent.status] }}>
                 {agent.findings.length} found
               </span>
             )}
@@ -84,7 +84,12 @@ export function AgentCard({
             )}
           </div>
         </div>
-        <p style={{ fontSize: 12, color: "var(--ink-2)", marginTop: 4 }}>{agent.description}</p>
+        <p style={{ fontSize: 13, color: "var(--ink-2)", marginTop: 4 }}>{agent.description}</p>
+        {(agent.model || agent.durationMs) && (
+          <p style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 6, fontFamily: "var(--font-mono)" }}>
+            {agent.model ?? "model"} {agent.durationMs ? `- ${(agent.durationMs / 1000).toFixed(1)}s` : ""}
+          </p>
+        )}
       </div>
 
       {/* system prompt panel */}
@@ -122,14 +127,14 @@ export function AgentCard({
             >
               <span className={`badge badge-${f.severity}`}>{f.severity}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <p style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {f.title}
                 </p>
-                <p style={{ fontSize: 11, color: "var(--ink-2)", fontFamily: "var(--font-mono)" }}>
+                <p style={{ fontSize: 12, color: "var(--ink-2)", fontFamily: "var(--font-mono)" }}>
                   {f.file}{f.line ? `:${f.line}` : ""}
                 </p>
               </div>
-              <span style={{ fontSize: 11, color: "var(--ink-3)", flexShrink: 0 }}>{f.confidence}%</span>
+              <span style={{ fontSize: 12, color: "var(--ink-3)", flexShrink: 0 }}>{f.confidence}%</span>
             </button>
           ))}
         </div>

@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { AGENTS } from "@/lib/prompts";
+import { MODEL_PROFILES } from "@/lib/model-policy";
+import { SCOUT_TARGET_REPO_URL } from "@/lib/live-target";
+import type { ScoutModelProfile } from "@/lib/types";
 
 /**
  * The landing/input screen. Single GitHub URL field + launch button.
@@ -11,11 +14,15 @@ import { AGENTS } from "@/lib/prompts";
 export function InputView({
   repo,
   setRepo,
+  modelProfile,
+  setModelProfile,
   onLaunch,
   onLaunchDemo,
 }: {
   repo: string;
   setRepo: (v: string) => void;
+  modelProfile: ScoutModelProfile;
+  setModelProfile: (v: ScoutModelProfile) => void;
   onLaunch: () => void;
   onLaunchDemo: () => void;
 }) {
@@ -104,6 +111,51 @@ export function InputView({
               boxSizing: "border-box",
             }}
           />
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 8 }}>
+              <label style={{ display: "block", fontSize: 14, fontWeight: 750 }}>
+                Model path
+              </label>
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ padding: "5px 9px", fontSize: 13 }}
+                onClick={() => setRepo(SCOUT_TARGET_REPO_URL)}
+              >
+                Use target repo
+              </button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {(Object.keys(MODEL_PROFILES) as ScoutModelProfile[]).map((profile) => {
+                const selected = modelProfile === profile;
+                const cfg = MODEL_PROFILES[profile];
+                return (
+                  <button
+                    key={profile}
+                    type="button"
+                    onClick={() => setModelProfile(profile)}
+                    style={{
+                      border: `1px solid ${selected ? "var(--blue)" : "var(--border)"}`,
+                      background: selected ? "var(--blue-surface)" : "var(--surface)",
+                      color: "var(--ink)",
+                      borderRadius: 8,
+                      padding: "10px 9px",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span style={{ display: "block", fontWeight: 850, fontSize: 14 }}>{cfg.label}</span>
+                    <span style={{ display: "block", color: "var(--ink-2)", fontSize: 12, lineHeight: 1.35, marginTop: 3 }}>
+                      {cfg.review}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ color: "var(--ink-2)", fontSize: 13, marginTop: 8, lineHeight: 1.45 }}>
+              Fast is the default for live demos. Deep is for final proof when latency is acceptable.
+            </p>
+          </div>
           <button
             className="btn-primary"
             style={{ width: "100%", justifyContent: "center" }}

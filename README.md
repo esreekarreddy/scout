@@ -63,6 +63,12 @@ GITHUB_TOKEN=your_optional_github_token
 
 The main live demo target is [https://github.com/esreekarreddy/scout-target-repo](https://github.com/esreekarreddy/scout-target-repo). It is intentionally tiny and flawed, with a known answer key for measuring live model findings.
 
+The app also exposes a model path selector:
+
+- `Fast`: `gpt-5.4-mini` for live demos and iteration.
+- `Balanced`: `gpt-5.5` for the strongest default run.
+- `Deep`: `gpt-5.5-pro` for slower final proof.
+
 No key is needed for the deterministic seeded review, MCP smoke test, or UI walkthrough.
 
 ## Local Verification
@@ -94,6 +100,7 @@ npm run scout:mcp
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
 | `POST /api/score-patches` | applies completed patch candidates in a temp workspace when repo files are available, then returns execution-aware tournament scores |
 | `src/lib/github.ts` | fetches a bounded GitHub file tree so live review sees README claims, package files, source, and tests without dumping the whole repo |
+| `src/lib/model-policy.ts` | maps Fast, Balanced, and Deep model paths to review, fix, and judge use cases |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
 | `npm run scout:unit` | runs deterministic unit-style checks for judge, eval, tournament, trace, patch execution, and evidence graph behavior |
 | `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, execution summaries, trace receipt, and checksums |

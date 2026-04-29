@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Finding, FixerState } from "@/lib/types";
+import type { Finding, FixerState, ScoutModelProfile } from "@/lib/types";
 import { FIX_STRATEGIES } from "@/lib/prompts";
 import { streamFixer } from "@/lib/scout-stream";
 
@@ -19,7 +19,7 @@ export function initFixers(): FixerState[] {
  * Owns the parallel-fixer state. Fixers run when launchFixers(finding) is
  * called. closeFixers() resets and dismisses the modal.
  */
-export function useFixerRun(repo: string) {
+export function useFixerRun(repo: string, modelProfile: ScoutModelProfile) {
   const [fixingFinding, setFixingFinding] = useState<Finding | null>(null);
   const [fixers, setFixers] = useState<FixerState[]>(initFixers());
 
@@ -30,7 +30,7 @@ export function useFixerRun(repo: string) {
     await Promise.allSettled(
       FIX_STRATEGIES.map(async ({ key }, idx) => {
         try {
-          await streamFixer(repo, f, key, (chunk) =>
+          await streamFixer(repo, f, key, modelProfile, (chunk) =>
             setFixers((prev) =>
               prev.map((x, i) => (i === idx ? { ...x, patch: x.patch + chunk } : x)),
             ),

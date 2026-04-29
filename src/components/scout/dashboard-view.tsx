@@ -155,36 +155,6 @@ export function DashboardView({
           ]}
         />
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(430px, 100%), 1fr))",
-            gap: 16,
-            alignItems: "start",
-            marginBottom: 24,
-          }}
-        >
-          <EvidenceMap repo={repo} findings={judgedFindings} agents={agents} />
-          <TraceReceipt repo={repo} findings={judgedFindings} agents={agents} allDone={allDone} />
-        </div>
-
-        <EvidencePack repo={repo} findings={judgedFindings} agents={agents} />
-
-        {/* agents grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16, marginBottom: 24 }}>
-          {agents.map((agent, idx) => (
-            <AgentCard
-              key={agent.aspect}
-              agent={agent}
-              promptOpen={openPromptIdx === idx}
-              onTogglePrompt={() => setOpenPromptIdx(openPromptIdx === idx ? null : idx)}
-              onFindingClick={onFix}
-            />
-          ))}
-
-          {/* [SLOT-2A] · Tier-2 Task 2A: Knowledge graph card goes here */}
-        </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, alignItems: "start" }}>
           <FindingFeed findings={judgedFindings} onFix={onFix} />
 
@@ -196,6 +166,52 @@ export function DashboardView({
             onSelectFinding={onFix}
           />
         </div>
+
+        <details className="card" style={{ marginTop: 24, padding: 0, overflow: "hidden" }}>
+          <summary
+            style={{
+              padding: "16px 20px",
+              cursor: "pointer",
+              fontWeight: 850,
+              fontSize: 16,
+              borderBottom: "1px solid var(--border)",
+              background: "var(--surface)",
+            }}
+          >
+            Evidence, traces, and scout streams
+          </summary>
+
+          <div style={{ padding: 16 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(430px, 100%), 1fr))",
+                gap: 16,
+                alignItems: "start",
+                marginBottom: 20,
+              }}
+            >
+              <EvidenceMap repo={repo} findings={judgedFindings} agents={agents} />
+              <TraceReceipt repo={repo} findings={judgedFindings} agents={agents} allDone={allDone} />
+            </div>
+
+            <EvidencePack repo={repo} findings={judgedFindings} agents={agents} />
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16, marginTop: 20 }}>
+              {agents.map((agent, idx) => (
+                <AgentCard
+                  key={agent.aspect}
+                  agent={agent}
+                  promptOpen={openPromptIdx === idx}
+                  onTogglePrompt={() => setOpenPromptIdx(openPromptIdx === idx ? null : idx)}
+                  onFindingClick={onFix}
+                />
+              ))}
+
+              {/* [SLOT-2A] · Tier-2 Task 2A: Knowledge graph card goes here */}
+            </div>
+          </div>
+        </details>
       </main>
     </div>
   );

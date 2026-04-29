@@ -3,15 +3,17 @@ import { streamText } from "ai";
 import { fetchRepoContext } from "@/lib/github";
 import { AGENTS, buildReviewMessage } from "@/lib/prompts";
 import { getDemoReviewStream, isDemoRepo } from "@/lib/demo-fixtures";
-import type { Aspect } from "@/lib/types";
+import { normalizeModelProfile, selectModel } from "@/lib/model-policy";
+import type { Aspect, ScoutModelProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const { repo, aspect } = (await req.json()) as {
+  const { repo, aspect, modelProfile } = (await req.json()) as {
     repo: string;
     aspect: Aspect;
+    modelProfile?: ScoutModelProfile;
   };
 
   const agent = AGENTS.find((a) => a.aspect === aspect);
@@ -28,16 +30,21 @@ export async function POST(req: Request) {
     repoContext = `// Could not fetch ${repo}. Add GITHUB_TOKEN to .env.local for higher rate limits.`;
   }
 
+  const profile = normalizeModelProfile(modelProfile);
+  const model = selectModel({ profile, task: "review", fallback: process.env.OPENAI_MODEL });
   const result = streamText({
-    model: openai(process.env.OPENAI_MODEL ?? "gpt-5.5"),
+    model: openai(model),
     system: agent.system,
     messages: [{ role: "user", content: buildReviewMessage(repoContext) }],
   });
 
-  return streamPlainText(result.textStream);
+  return streamPlainText(result.textStream, 0, {
+    "X-Scout-Model": model,
+    "X-Scout-Model-Profile": profile ?? "env",
+  });
 }
 
-function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0) {
+function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0, headers: Record<string, string> = {}) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -57,6 +64,6 @@ function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0) {
   });
 
   return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: { "Content-Type": "text/plain; charset=utf-8", ...headers },
   });
 }

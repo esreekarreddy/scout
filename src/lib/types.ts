@@ -5,6 +5,7 @@ export type JudgeVerdict = "confirmed" | "likely" | "speculative";
 
 export type FixStrategy = "conservative" | "idiomatic" | "robust";
 export type SeedStatus = "caught" | "missed" | "extra";
+export type ScoutModelProfile = "fast" | "balanced" | "deep";
 
 export interface FixerState {
   strategy: FixStrategy;
@@ -38,6 +39,8 @@ export interface AgentState {
   /** Raw streaming text (think-aloud analysis) */
   raw: string;
   findings: Finding[];
+  model?: string;
+  durationMs?: number;
 }
 
 export interface SeededMistake {

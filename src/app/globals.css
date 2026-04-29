@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ─── tokens ───────────────────────────────────────────────────────── */
+/* tokens */
 :root {
   --canvas:        #f4f5f2;
   --surface:       #ffffff;
@@ -45,12 +45,13 @@
   --color-red-surface:   var(--red-surface);
 }
 
-/* ─── base ─────────────────────────────────────────────────────────── */
+/* base */
 html, body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
   min-height: 100%;
+  font-size: 16.5px;
 }
 
 body {
@@ -63,6 +64,10 @@ body {
 
 h1, h2, h3, p {
   letter-spacing: 0;
+}
+
+p, li, summary, button, input {
+  line-height: 1.45;
 }
 
 * {
@@ -83,7 +88,7 @@ h1, h2, h3, p {
   box-shadow: inset 0 0 0 2px var(--blue);
 }
 
-/* ─── animations ────────────────────────────────────────────────────── */
+/* animations */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -105,14 +110,14 @@ h1, h2, h3, p {
 .spin-slow      { animation: spin-slow 1.4s linear infinite; }
 .pulse-dot      { animation: pulse-dot 1.5s ease-in-out infinite; }
 
-/* ─── scrollbar ─────────────────────────────────────────────────────── */
+/* scrollbar */
 .scroll-thin::-webkit-scrollbar { width: 4px; }
 .scroll-thin::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 999px;
 }
 
-/* ─── card ──────────────────────────────────────────────────────────── */
+/* card */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -120,7 +125,7 @@ h1, h2, h3, p {
   box-shadow: 0 10px 30px rgba(21, 24, 19, 0.04);
 }
 
-/* ─── badge ─────────────────────────────────────────────────────────── */
+/* badge */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -136,7 +141,7 @@ h1, h2, h3, p {
 .badge-warning  { background: var(--amber-surface); color: var(--amber); border: 1px solid var(--amber-border); }
 .badge-info     { background: var(--blue-surface);  color: var(--blue);  border: 1px solid var(--blue-border);  }
 
-/* ─── btn ────────────────────────────────────────────────────────────── */
+/* btn */
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -146,7 +151,7 @@ h1, h2, h3, p {
   background: var(--blue);
   color: #ffffff;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
   border: none;
   cursor: pointer;
   transition: opacity 0.15s;
@@ -167,7 +172,7 @@ h1, h2, h3, p {
   background: transparent;
   color: var(--ink-2);
   font-weight: 500;
-  font-size: 14px;
+  font-size: 15px;
   border: 1px solid var(--border);
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;

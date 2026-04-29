@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import type { AgentState, Aspect } from "@/lib/types";
+import type { AgentState, Aspect, ScoutModelProfile } from "@/lib/types";
 import { streamAgent } from "@/lib/scout-stream";
 import { DEMO_REPO_URL } from "@/lib/demo-fixtures";
 
@@ -25,6 +25,7 @@ export type Stage = "input" | "scanning" | "results";
 export function useScoutRun() {
   const [stage, setStage] = useState<Stage>("input");
   const [repo, setRepo] = useState("");
+  const [modelProfile, setModelProfile] = useState<ScoutModelProfile>("fast");
   const [agents, setAgents] = useState<AgentState[]>(initAgents());
   const findingIdRef = useRef(0);
 
@@ -49,9 +50,11 @@ export function useScoutRun() {
     await Promise.allSettled(
       ASPECTS.map(async ({ aspect }, idx) => {
         try {
-          await streamAgent(
+          const startedAt = Date.now();
+          const result = await streamAgent(
             targetRepo,
             aspect,
+            modelProfile,
             (chunk) =>
               setAgents((prev) =>
                 prev.map((a, i) => (i === idx ? { ...a, raw: a.raw + chunk } : a)),
@@ -67,7 +70,13 @@ export function useScoutRun() {
               );
             },
           );
-          setAgentField(idx, "status", "done");
+          setAgents((prev) =>
+            prev.map((a, i) =>
+              i === idx
+                ? { ...a, status: "done", model: result.model, durationMs: Date.now() - startedAt }
+                : a,
+            ),
+          );
         } catch {
           setAgentField(idx, "status", "error");
         }
@@ -88,6 +97,8 @@ export function useScoutRun() {
     stage,
     repo,
     setRepo,
+    modelProfile,
+    setModelProfile,
     agents,
     allFindings,
     allDone,

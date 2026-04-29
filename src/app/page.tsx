@@ -12,11 +12,20 @@ import { FixModal } from "@/components/scout/fix-modal";
  * and use-fixer-run.ts), not by inlining state into this file.
  */
 export default function Home() {
-  const { stage, repo, setRepo, agents, allDone, launch, launchDemo, reset } = useScoutRun();
-  const { fixingFinding, fixers, launchFixers, closeFixers } = useFixerRun(repo);
+  const { stage, repo, setRepo, modelProfile, setModelProfile, agents, allDone, launch, launchDemo, reset } = useScoutRun();
+  const { fixingFinding, fixers, launchFixers, closeFixers } = useFixerRun(repo, modelProfile);
 
   if (stage === "input") {
-    return <InputView repo={repo} setRepo={setRepo} onLaunch={launch} onLaunchDemo={launchDemo} />;
+    return (
+      <InputView
+        repo={repo}
+        setRepo={setRepo}
+        modelProfile={modelProfile}
+        setModelProfile={setModelProfile}
+        onLaunch={launch}
+        onLaunchDemo={launchDemo}
+      />
+    );
   }
 
   return (
