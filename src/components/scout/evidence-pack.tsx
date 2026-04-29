@@ -141,7 +141,7 @@ export function EvidencePack({
       <aside style={{ padding: "18px 20px", background: "var(--canvas)" }}>
         <p style={{ fontWeight: 800, fontSize: 15 }}>Tool call strip</p>
         <p style={{ color: "var(--ink-2)", fontSize: 12, marginTop: 3 }}>
-          The local MCP-style surface exposes review, fix, score, and handoff calls for agent tools.
+          The official local MCP server exposes review, fix, score, and handoff calls for agent tools.
         </p>
         <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           {toolRows.map(([tool, output]) => (
