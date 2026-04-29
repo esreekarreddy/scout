@@ -6,6 +6,8 @@ Scout evaluates code produced by coding agents for the failure modes normal PR r
 
 The product loop is simple: specialist scouts prove the bug, repair agents compete on patches, deterministic gates score the candidates, and Scout returns the winning PR-ready handoff.
 
+Every eval run also emits a trace receipt with step checksums and explicit deterministic versus model boundaries, so the demo can prove where each verdict came from.
+
 Built for the **OpenAI Codex Hackathon - Sydney - 29 April 2026**.
 
 ```text
@@ -66,6 +68,7 @@ No key is needed for the deterministic seeded review, MCP smoke test, or UI walk
 ```bash
 npm run scout:smoke
 npm run scout:eval -- --assert
+npm run scout:qa
 npx tsc --noEmit --pretty false
 npm run lint
 npm run build
@@ -87,8 +90,9 @@ npm run scout:mcp
 | `POST /api/review` | streams one specialist review agent; seeded demo returns deterministic streams |
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
-| `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, and checksums |
-| `npm run scout:mcp` | starts the local stdio JSON-RPC tool surface for `scout_review`, `scout_fix`, `scout_score_patch`, and `scout_handoff` |
+| `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, trace receipt, and checksums |
+| `npm run scout:qa` | checks eval JSON shape, local tool calls, seeded gates, trace stages, and hygiene rules |
+| `npm run scout:mcp` | starts the local stdio JSON-RPC tool surface for `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, and `scout_eval` |
 
 ## Specialist Agents
 
@@ -98,7 +102,7 @@ npm run scout:mcp
 - **Judge layer:** deterministic dedupe/ranking pass that marks findings as `confirmed`, `likely`, or `speculative`.
 - **Repair agents:** conservative, idiomatic, and robust patch strategies compete against the same finding.
 - **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, and adds proof where needed.
-- **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, and pass/warn/fail gates.
+- **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, trace receipt, and pass/warn/fail gates.
 
 ## Seeded Benchmark
 
@@ -122,9 +126,9 @@ The UI reports caught/confirmed/speculative counts so the demo is an eval, not j
 | Domain credibility | The hackathon workflow is the domain. Scout checks the kind of code Codex-style agents write under time pressure. |
 | Tools, not chat | The tool surface exposes `scout_review`, `scout_fix`, `scout_score_patch`, and `scout_handoff`. |
 | Real artifact | Each run produces an Evidence Pack, ranked findings, competing diffs, a Tournament Receipt, and a Codex handoff. |
-| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, and patch gates separate evidence from speculation. |
+| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, patch gates, trace checksums, and QA gates separate evidence from speculation. |
 | Crisp demo moment | The privacy finding proves a contradiction: code logs raw email while the comment says the email is redacted. Robust wins because it fixes code and adds a privacy test. |
-| Deterministic vs model boundary | Seeded benchmark, fixture patches, patch scoring, and MCP smoke tests are deterministic. Live repo review and live fix generation use the OpenAI API. |
+| Deterministic vs model boundary | Seeded benchmark, fixture patches, patch scoring, trace receipts, QA checks, and MCP smoke tests are deterministic. Live repo review and live fix generation use the OpenAI API. |
 
 ## Demo Artifact
 
@@ -154,6 +158,11 @@ Patch Tournament:
 - Idiomatic: useful fix, maybe
 - Robust: fixes the behavior and adds a privacy test, wins
 
+Trace:
+- review, judge, fix, score, and handoff each have input and output checksums
+- deterministic fixture steps are labelled as model: none
+- receipt id links the eval report to the handoff
+
 After:
 - winning diff removes raw email logging
 - test asserts the raw email is absent
@@ -181,9 +190,16 @@ src/
     scout-runner.ts          shared local runner for Scout tools
     scout-stream.ts          client stream helpers
     tournament.ts            proof ledger, patch scoring, receipt helpers
+    trace.ts                 deterministic eval trace receipts
     types.ts                 shared types
   mcp/
     server.ts                local stdio JSON-RPC tool server
+  tools/
+    scout-eval.ts            deterministic eval CLI
+scripts/
+  qa-eval-json-shape.ts      eval report and trace shape gate
+  qa-mcp-tools.ts            local JSON-RPC tool smoke gate
+  qa-hygiene.ts              dash, secret, and wifi-detail hygiene gate
   components/scout/
     input-view.tsx           product entry screen
     dashboard-view.tsx       composed evaluation dashboard

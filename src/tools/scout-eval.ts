@@ -90,6 +90,7 @@ function formatReport(report: EvalReport, format: OutputFormat) {
     `Precision: ${percent(report.metrics.precision)} (${report.metrics.extraFindings} extra findings)`,
     `Best patch: ${bestPatch ? `${bestPatch.candidateId} ${bestPatch.score}/100` : "none"}`,
     `Gates: ${failingGates.length === 0 ? "pass" : `fail ${failingGates.map((gate) => gate.id).join(", ")}`}`,
+    `Trace: ${report.trace.id} (${report.traceChecksum})`,
     `Checksum: ${report.checksum}`,
   ].join("\n");
 }

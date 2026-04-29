@@ -7,6 +7,8 @@ import {
   proofHash,
   scorePatchTournament,
 } from "../tournament";
+import { buildEvalTrace } from "../trace";
+import type { EvalTrace } from "../trace";
 import type {
   Aspect,
   BenchmarkManifest,
@@ -90,6 +92,8 @@ export interface EvalReport {
   gates: EvalGate[];
   patchDiagnostics: PatchTournamentDiagnostic[];
   receipt: TournamentReceipt;
+  trace: EvalTrace;
+  traceChecksum: string;
   checksum: string;
 }
 
@@ -113,6 +117,7 @@ export function buildEvalReport(input: {
 }): EvalReport {
   const manifest = input.manifest ?? SEEDED_BENCHMARK_MANIFEST;
   const repo = input.repo ?? manifest.repo ?? DEMO_REPO_URL;
+  const generatedAt = input.generatedAt ?? new Date(0).toISOString();
   const thresholds = { ...DEFAULT_EVAL_THRESHOLDS, ...input.thresholds };
   const ledger = buildProofLedger(input.findings, manifest);
   const patchScores = scorePatchTournament(input.patchCandidates ?? [], input.findings);
@@ -130,9 +135,21 @@ export function buildEvalReport(input: {
   });
   const gates = buildEvalGates(metrics, patchScores, thresholds);
   const patchDiagnostics = patchScores.map((score) => buildPatchDiagnostic(score, candidatesById.get(score.candidateId)));
+  const trace = buildEvalTrace({
+    repo,
+    generatedAt,
+    manifest,
+    findings: input.findings,
+    patchCandidates: input.patchCandidates ?? [],
+    ledger,
+    metrics,
+    gates,
+    patchDiagnostics,
+    receipt,
+  });
   const unsigned = {
     repo,
-    generatedAt: input.generatedAt ?? "deterministic",
+    generatedAt,
     thresholds,
     manifest,
     ledger,
@@ -141,13 +158,15 @@ export function buildEvalReport(input: {
     patchDiagnostics,
     receiptId: receipt.id,
     receiptChecksum: receipt.checksum,
+    traceId: trace.id,
+    traceChecksum: trace.checksum,
   };
   const id = `eval.${proofHash(unsigned).slice(0, 12)}`;
 
   return {
     id,
     repo,
-    generatedAt: input.generatedAt ?? new Date(0).toISOString(),
+    generatedAt,
     thresholds,
     manifest,
     ledger,
@@ -155,6 +174,8 @@ export function buildEvalReport(input: {
     gates,
     patchDiagnostics,
     receipt,
+    trace,
+    traceChecksum: trace.checksum,
     checksum: proofHash({ id, ...unsigned }),
   };
 }
@@ -238,6 +259,7 @@ export function formatEvalReportMarkdown(report: EvalReport): string {
     `Checksum: ${report.checksum}`,
     `Manifest: ${report.manifest.id} (${report.manifest.checksum})`,
     `Receipt: ${report.receipt.id} (${report.receipt.checksum})`,
+    `Trace: ${report.trace.id} (${report.traceChecksum})`,
     "",
     "## Benchmark Metrics",
     markdownTable(["Metric", "Value", "Detail"], metricRows),

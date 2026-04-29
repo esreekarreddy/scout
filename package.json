@@ -10,6 +10,10 @@
     "scout:eval:report": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-tools --noEmit false src/tools/scout-eval.ts && node .next/scout-tools/tools/scout-eval.js --format markdown --out .next/scout-eval-report.md",
     "scout:mcp": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-mcp --noEmit false src/mcp/server.ts && node .next/scout-mcp/mcp/server.js",
     "scout:smoke": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-mcp --noEmit false src/mcp/server.ts && node .next/scout-mcp/mcp/server.js --smoke",
+    "scout:qa": "npm run scout:qa:eval-json && npm run scout:qa:mcp && npm run scout:qa:hygiene",
+    "scout:qa:eval-json": "tsc --module commonjs --moduleResolution node --target ES2022 --rootDir . --outDir .next/scout-qa --noEmit false scripts/qa-eval-json-shape.ts && node .next/scout-qa/scripts/qa-eval-json-shape.js",
+    "scout:qa:mcp": "tsc --module commonjs --moduleResolution node --target ES2022 --rootDir . --outDir .next/scout-mcp --noEmit false src/mcp/server.ts scripts/qa-mcp-tools.ts && node .next/scout-mcp/scripts/qa-mcp-tools.js",
+    "scout:qa:hygiene": "tsc --module commonjs --moduleResolution node --target ES2022 --rootDir . --outDir .next/scout-qa --noEmit false scripts/qa-hygiene.ts && node .next/scout-qa/scripts/qa-hygiene.js",
     "test:eval": "npm run scout:eval -- --assert",
     "start": "next start",
     "lint": "eslint"
