@@ -20,7 +20,7 @@ Built for the **OpenAI Codex Hackathon - Sydney - 29 April 2026**.
 - Next.js API routes for review, fix generation, and patch scoring.
 - Deterministic seeded benchmark with seven planted AI-code failures.
 - Public live target repo designed for real OpenAI/GitHub testing.
-- Official TypeScript SDK MCP server with tools, resources, and prompts.
+- Official TypeScript SDK MCP server with tools, resources, prompts, seeded offline mode, and live public-repo review when `OPENAI_API_KEY` is configured.
 - Copyable handoffs for Codex and Claude Code.
 - Eval and QA suite covering core logic, patch execution, evidence graph, MCP client smoke, config templates, and hygiene.
 - Token-aware context path with inspected-file count, estimated tokens, prompt cache key, and OpenAI cached-token telemetry when the API returns it.
@@ -68,7 +68,7 @@ The current live target repo is:
 
 ## Official MCP
 
-Scout includes a local stdio MCP server built with the official TypeScript MCP SDK.
+Scout includes a local stdio MCP server built with the official TypeScript MCP SDK. Seeded eval runs offline. Live `scout_review` and `scout_fix` can review public GitHub repos through the same bounded context and OpenAI model path used by the web app when `OPENAI_API_KEY` is configured.
 
 Run the server:
 
@@ -80,6 +80,12 @@ That command waits for a client over stdio, so it will not print much by itself.
 
 ```bash
 npm run scout:qa:mcp
+```
+
+To test the live MCP path against the public target repo, with real GitHub and OpenAI calls:
+
+```bash
+npm run scout:mcp -- --smoke-live
 ```
 
 Scout exposes:

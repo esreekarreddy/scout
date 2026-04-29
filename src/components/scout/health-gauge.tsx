@@ -1,7 +1,7 @@
 import { healthColor, healthLabel } from "@/lib/health";
 
 /**
- * Animated circular health score. Spins while not done; settles to a
+ * Animated circular risk score. Spins while not done; settles to a
  * severity-coloured ring when complete. Owned by base.
  */
 export function HealthGauge({ score, done }: { score: number; done: boolean }) {

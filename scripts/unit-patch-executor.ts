@@ -9,6 +9,7 @@ async function main() {
   const passing = candidate("privacy.robust", validPrivacyPatch());
   const badContext = candidate("privacy.bad-context", badContextPatch());
   const failingCommand = candidate("privacy.command-fail", validPrivacyPatch());
+  const unsafeCommand = candidate("privacy.unsafe-command", validPrivacyPatch());
 
   const passResult = await executePatchTournament({
     candidates: [passing],
@@ -25,6 +26,32 @@ async function main() {
   assert(passResult[passing.id]?.eligible === true, "valid patch and passing command must be eligible");
   assert(passResult[passing.id]?.apply.exitCode === 0, "valid patch must apply");
   assert(passResult[passing.id]?.checks.length === 1, "valid patch must run the requested check");
+
+  const secretEnvKey = ["OPENAI", "API", "KEY"].join("_");
+  const originalKey = process.env[secretEnvKey];
+  process.env[secretEnvKey] = "test-secret-that-must-not-reach-checks";
+  try {
+    const envResult = await executePatchTournament({
+      candidates: [passing],
+      repoFiles: fixtureFiles(),
+      checkCommands: [nodeCheckCommand([
+        "const key = ['OPENAI', 'API', 'KEY'].join('_');",
+        "if (process.env[key]) throw new Error('secret leaked into patch check');",
+      ])],
+    });
+    assert(envResult[passing.id]?.eligible === true, "patch checks must run with a no-secret environment");
+  } finally {
+    if (originalKey === undefined) delete process.env[secretEnvKey];
+    else process.env[secretEnvKey] = originalKey;
+  }
+
+  const unsafeResult = await executePatchTournament({
+    candidates: [unsafeCommand],
+    repoFiles: fixtureFiles(),
+    checkCommands: ["git status"],
+  });
+  assert(unsafeResult[unsafeCommand.id]?.eligible === false, "unsafe check command must make patch ineligible");
+  assert(unsafeResult[unsafeCommand.id]?.disqualifiedReason === "unsafe-command", "unsafe check command must be reported explicitly");
 
   const applyFailure = await executePatchTournament({
     candidates: [badContext],
@@ -58,6 +85,8 @@ async function main() {
     ok: true,
     tests: [
       "patch-applies-and-commands-pass",
+      "patch-checks-do-not-receive-secrets",
+      "unsafe-check-command-disqualifies",
       "failed-apply-disqualifies",
       "failed-command-disqualifies",
       "execution-results-affect-ranking",

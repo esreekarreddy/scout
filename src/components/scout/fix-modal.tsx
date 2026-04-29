@@ -308,9 +308,9 @@ export function FixModal({
               <section className="card" style={{ padding: "14px 16px", borderRadius: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
                   <div>
-                    <p style={{ fontWeight: 800, fontSize: 14 }}>Patch execution gate</p>
+                    <p style={{ fontWeight: 800, fontSize: 14 }}>Patch safety gate</p>
                     <p style={{ color: "var(--ink-2)", fontSize: 12, marginTop: 3 }}>
-                      Scout applied each patch in a temporary workspace before ranking it.
+                      Scout validates patch schema and applies each candidate in a temporary workspace before ranking it.
                     </p>
                   </div>
                   <p style={{ fontFamily: "var(--font-mono)", color: "var(--ink-3)", fontSize: 11 }}>{executionMode}</p>

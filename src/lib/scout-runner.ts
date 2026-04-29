@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { DEMO_REPO_URL, getDemoFixPatch, getDemoReviewStream, isDemoRepo } from "./demo-fixtures";
+import { runLiveFix, runLiveReview } from "./live-runner";
 import { judgeFindings, calcEvalScore } from "./judge";
 import { AGENTS, FIX_STRATEGIES, parseFindingLine } from "./prompts";
 import {
@@ -22,7 +23,7 @@ import type {
 
 type ReviewResult = {
   repo: string;
-  mode: "demo" | "unsupported";
+  mode: "demo" | "live";
   findings: Finding[];
   judgedFindings: Finding[];
   evalScore: ReturnType<typeof calcEvalScore>;
@@ -66,20 +67,23 @@ function parseDemoFindings(aspect: Aspect): Finding[] {
     }));
 }
 
-export async function scoutReview(repo: string): Promise<ReviewResult> {
+export async function scoutReview(repo: string, modelProfile?: import("./types").ScoutModelProfile): Promise<ReviewResult> {
   if (!isDemoRepo(repo)) {
+    const live = await runLiveReview({ repo, modelProfile });
+    const judgedFindings = judgeFindings(live.findings);
     const proofLedger = buildProofLedger([]);
     return {
       repo,
-      mode: "unsupported",
-      findings: [],
-      judgedFindings: [],
-      evalScore: calcEvalScore([]),
+      mode: "live",
+      findings: live.findings,
+      judgedFindings,
+      evalScore: calcEvalScore(live.findings),
       manifest: SEEDED_BENCHMARK_MANIFEST,
       proofLedger,
       evidence: [
-        "Only demo://ai-written-code-seed is wired for this local stdio tool runner.",
-        "Live OpenAI and GitHub paths are exposed through the Next.js app routes, not this local runner.",
+        "Live MCP path used bounded public GitHub context plus configured OpenAI model calls.",
+        "Seeded recall is not claimed for arbitrary live repositories.",
+        ...live.evidence,
       ],
     };
   }
@@ -106,15 +110,23 @@ export async function scoutFix(
   repo: string,
   finding: Finding,
   strategy?: FixStrategy,
+  modelProfile?: import("./types").ScoutModelProfile,
 ): Promise<FixResult> {
   const strategies = strategy ? [strategy] : DEFAULT_STRATEGIES;
+  if (!isDemoRepo(repo)) {
+    const liveFix = await runLiveFix({ repo, finding, strategy, modelProfile });
+    return {
+      repo,
+      findingId: finding.id,
+      candidates: liveFix.candidates,
+    };
+  }
+
   const candidates = strategies.map((selectedStrategy) => ({
     id: checksum([repo, finding.id, selectedStrategy]),
     findingId: finding.id,
     strategy: selectedStrategy,
-    patch: isDemoRepo(repo)
-      ? getDemoFixPatch(finding.title, selectedStrategy)
-      : `// scout_fix live mode is not implemented in the local stdio runner.\n// Requested strategy: ${selectedStrategy}`,
+    patch: getDemoFixPatch(finding.title, selectedStrategy),
   }));
 
   return {

@@ -68,14 +68,29 @@ export default function DocsPage() {
         </Section>
 
         <Section title="Pipeline">
-          <ol style={{ ...textStyle, paddingLeft: 20 }}>
+          <ol style={{ ...textStyle, paddingLeft: 20, listStyleType: "decimal", listStylePosition: "outside" }}>
             <li>Load a GitHub repo or the deterministic <code style={codeStyle}>demo://ai-written-code-seed</code> fixture.</li>
             <li>Run three specialist scouts in parallel.</li>
             <li>Judge the findings, dedupe overlaps, and label verdicts.</li>
-            <li>Show a seeded eval score instead of a vague health claim.</li>
+            <li>Show seeded recall only when an answer key exists; otherwise show a live review summary.</li>
             <li>Spawn Conservative, Idiomatic, and Robust repair agents for any finding.</li>
-            <li>Rank patches with deterministic criteria and export a tournament receipt.</li>
+            <li>Validate patch shape, apply candidates in a temp workspace, rank eligible repairs, and export a receipt.</li>
           </ol>
+        </Section>
+
+        <Section title="Proof boundaries">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+            {[
+              ["Seeded demo", "Offline fixture streams and seven planted mistakes. Scout can report recall, critical recall, precision, and gates."],
+              ["Live target repo", "Real model calls against a public repo that has a known answer key, so found and missed target issues stay visible."],
+              ["Arbitrary live repo", "No answer key is claimed. Scout reports confirmed, likely, and speculative findings without pretending they are benchmark recall."],
+            ].map(([title, body]) => (
+              <article key={title} className="card" style={{ padding: 16 }}>
+                <p style={{ fontWeight: 800, fontSize: 14 }}>{title}</p>
+                <p style={{ ...textStyle, fontSize: 12, marginTop: 6 }}>{body}</p>
+              </article>
+            ))}
+          </div>
         </Section>
 
         <Section title="Specialist scouts">
@@ -122,6 +137,19 @@ export default function DocsPage() {
           </p>
         </Section>
 
+        <Section title="Patch safety gate">
+          <p style={textStyle}>
+            Scout rejects malformed patch output before it can win. The scoring route requires a plain
+            unified diff, applies each valid candidate in a temporary workspace, and marks failed applies,
+            unavailable repo context, failed checks, or unsafe check commands as ineligible.
+          </p>
+          <p style={textStyle}>
+            Patch checks run with a stripped environment, so API keys and repository credentials are not
+            inherited by candidate execution. The demo also includes a deterministic malformed-patch proof
+            button, so disqualification can be shown without faking a model failure.
+          </p>
+        </Section>
+
         <Section title="MCP surface">
           <p style={textStyle}>
             Scout also runs as an official TypeScript SDK MCP server over stdio. Coding agents can call
@@ -131,6 +159,20 @@ export default function DocsPage() {
             the seeded manifest, seeded eval, and demo handoff prompt, plus native prompts for review,
             patch tournament, and Codex handoff workflows.
           </p>
+          <p style={textStyle}>
+            Seeded MCP eval is offline and deterministic. Live <code style={codeStyle}>scout_review</code>{" "}
+            and <code style={codeStyle}>scout_fix</code> use the same bounded GitHub context and configured
+            OpenAI model path as the web app. The repeatable live smoke command is{" "}
+            <code style={codeStyle}>npm run scout:mcp -- --smoke-live</code>.
+          </p>
+        </Section>
+
+        <Section title="Deterministic versus model output">
+          <ul style={{ ...textStyle, paddingLeft: 20, listStyleType: "disc", listStylePosition: "outside" }}>
+            <li>Model-generated: live scout text, live finding candidates, and live patch text.</li>
+            <li>Deterministic: schema validation, judge grouping, seeded answer-key scoring, patch shape checks, patch apply eligibility, checksums, and receipts.</li>
+            <li>Heuristic: risk score and patch score. They are visible ranking signals, not a production security audit.</li>
+          </ul>
         </Section>
 
         <Section title="Code map">
@@ -148,7 +190,9 @@ export default function DocsPage() {
             }}
           >{`src/lib/demo-fixtures.ts   seeded benchmark and deterministic patches
 src/lib/prompts.ts         specialist scout and repair prompts
+src/lib/live-runner.ts     shared live OpenAI runner for API and MCP
 src/lib/judge.ts           dedupe, verdicts, eval score
+src/lib/patch-executor.ts  temp-workspace patch apply and safety checks
 src/app/api/review         live or seeded review stream
 src/app/api/fix            live or seeded repair stream
 src/lib/context-budget.ts  token estimate, cache keys, usage telemetry

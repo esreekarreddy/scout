@@ -230,7 +230,7 @@ export function TraceReceipt({
         <div style={{ border: "1px solid var(--green-border)", borderRadius: 8, background: "var(--green-surface)", padding: 10 }}>
           <p style={{ color: "var(--green)", fontSize: 10, fontWeight: 900, textTransform: "uppercase" }}>Deterministic</p>
           <p style={{ marginTop: 5, color: "var(--ink-2)", fontSize: 11, lineHeight: 1.4 }}>
-            Intake hashes, judge grouping, graph links, health score, and receipt ids.
+            Intake hashes, judge grouping, graph links, heuristic risk score, and receipt ids.
           </p>
         </div>
         <div style={{ border: "1px solid var(--amber-border)", borderRadius: 8, background: "var(--amber-surface)", padding: 10 }}>

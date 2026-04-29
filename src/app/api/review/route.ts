@@ -1,9 +1,9 @@
 import { openai } from "@ai-sdk/openai";
 import { streamText } from "ai";
-import { fetchRepoContext } from "@/lib/github";
 import { AGENTS, buildReviewMessage } from "@/lib/prompts";
 import { getDemoReviewStream, isDemoRepo } from "@/lib/demo-fixtures";
 import { normalizeModelProfile, selectModel } from "@/lib/model-policy";
+import { getVerifiedRepoContext } from "@/lib/live-runner";
 import { buildContextBudget, buildPromptCacheKey, contextBudgetHeaders, encodeContextUsageTelemetry } from "@/lib/context-budget";
 import {
   apiErrorResponse,
@@ -43,12 +43,7 @@ export async function POST(req: Request) {
 
     requireOpenAIKey();
 
-    let repoContext = "";
-    try {
-      repoContext = await fetchRepoContext(repo);
-    } catch {
-      repoContext = "// Could not fetch public GitHub repository context.";
-    }
+    const repoContext = await getVerifiedRepoContext(repo);
 
     const profile = normalizeModelProfile(modelProfile);
     const model = selectModel({ profile, task: "review", fallback: process.env.OPENAI_MODEL });

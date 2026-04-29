@@ -168,7 +168,7 @@ export function PatchTournament({
   const winner = scores.find((score) => score.winner);
   const noEligiblePatch = Boolean(serverScoringSettled && scores.length > 0 && !scores.some((score) => score.status === "done" && score.score > 0));
   const modeLabel = executionMode === "apply-gated"
-    ? "apply gated"
+    ? "schema + apply gated"
     : executionMode === "repo-context-unavailable"
       ? "repo unavailable"
       : "deterministic scorer";
@@ -196,7 +196,7 @@ export function PatchTournament({
               </span>
             </div>
             <p style={{ color: "var(--ink-2)", fontSize: 12, marginTop: 3 }}>
-              Three repair agents compete. The model writes patches, then Scout ranks target fit, risk removal, proof, scope, and patch apply eligibility.
+              Three repair agents compete. The model writes patches; Scout validates diff shape, applies eligible patches in a temp workspace, then ranks target fit, risk removal, proof, and scope.
             </p>
           </div>
           <p style={{ color: winner ? "var(--green)" : noEligiblePatch ? "var(--red)" : "var(--ink-3)", fontWeight: 900, fontSize: 12, textAlign: "right", minWidth: 150 }}>

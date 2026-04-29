@@ -5,6 +5,7 @@ import type { AgentState, Finding, ScoutModelProfile } from "@/lib/types";
 import { calcHealth } from "@/lib/health";
 import { calcEvalScore, judgeFindings } from "@/lib/judge";
 import { calcLiveTargetStats } from "@/lib/live-target";
+import { isDemoRepo } from "@/lib/demo-fixtures";
 import { TopBar } from "./top-bar";
 import { HealthGauge } from "./health-gauge";
 import { Stat } from "./stat";
@@ -51,8 +52,99 @@ export function DashboardView({
   const score = calcHealth(judgedFindings);
   const evalScore = calcEvalScore(allFindings);
   const liveTargetStats = calcLiveTargetStats(repo, judgedFindings);
+  const isDemo = isDemoRepo(repo);
   const runningCount = agents.filter((a) => a.status === "running").length;
   const doneCount = agents.filter((a) => a.status === "done").length;
+  const scorecardTitle = liveTargetStats.enabled
+    ? "Live target answer key"
+    : isDemo
+      ? "Seeded proof benchmark"
+      : "Live review summary";
+  const scorecardSubtitle = liveTargetStats.enabled
+    ? "This public target repo has planted mistakes, so live model findings can be measured instead of just admired."
+    : isDemo
+      ? "Demo mode is measured against known AI-code mistakes, so recall and noise stay visible."
+      : "No answer key is claimed for this repo. Scout shows model findings separated by deterministic judge labels.";
+  const scorecardScores = liveTargetStats.enabled
+    ? [
+      {
+        id: "caught",
+        label: "Caught",
+        value: liveTargetStats.caught,
+        max: liveTargetStats.total,
+        note: "matched planted target issues",
+        tone: "green" as const,
+      },
+      {
+        id: "confirmed",
+        label: "Confirmed",
+        value: liveTargetStats.confirmed,
+        max: Math.max(1, judgedFindings.length),
+        note: "deduped judge groups with evidence",
+        tone: "blue" as const,
+      },
+      {
+        id: "missed",
+        label: "Missed",
+        value: liveTargetStats.missed,
+        max: liveTargetStats.total,
+        note: "answer-key issues not found yet",
+        tone: liveTargetStats.missed > 2 ? "red" as const : "amber" as const,
+      },
+    ]
+    : isDemo
+      ? [
+        {
+          id: "caught",
+          label: "Caught",
+          value: evalScore.caught,
+          max: evalScore.seededMistakes,
+          note: "raw seeded findings surfaced",
+          tone: "green" as const,
+        },
+        {
+          id: "confirmed",
+          label: "Confirmed",
+          value: evalScore.confirmed,
+          max: evalScore.seededMistakes,
+          note: "deduped judge groups with evidence",
+          tone: "blue" as const,
+        },
+        {
+          id: "speculative",
+          label: "Speculative",
+          value: evalScore.speculative,
+          max: Math.max(1, judgedFindings.length),
+          note: "kept separate from demo claims",
+          tone: evalScore.speculative > 2 ? "red" as const : "amber" as const,
+        },
+      ]
+      : [
+        {
+          id: "confirmed",
+          label: "Confirmed",
+          value: judgedFindings.filter((finding) => finding.verdict === "confirmed").length,
+          max: Math.max(1, judgedFindings.length),
+          note: "high-confidence or cross-agent groups",
+          tone: "blue" as const,
+        },
+        {
+          id: "likely",
+          label: "Likely",
+          value: judgedFindings.filter((finding) => finding.verdict === "likely").length,
+          max: Math.max(1, judgedFindings.length),
+          note: "evidence-backed but not proven by answer key",
+          tone: "amber" as const,
+        },
+        {
+          id: "speculative",
+          label: "Speculative",
+          value: judgedFindings.filter((finding) => finding.verdict === "speculative").length,
+          max: Math.max(1, judgedFindings.length),
+          note: "visible, but blocked from proof claims",
+          tone: "red" as const,
+        },
+      ];
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -77,7 +169,7 @@ export function DashboardView({
             <HealthGauge score={score} done={allDone} />
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 14, color: "rgba(248,255,248,0.94)", marginBottom: 10, fontWeight: 750 }}>
-                {allDone ? "Deterministic judge complete" : "Evaluating AI-code failures"}
+                {allDone ? "Heuristic risk judge complete" : "Evaluating AI-code failures"}
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <Stat label="Confirmed" value={judgedFindings.filter((f) => f.verdict === "confirmed").length} color="#45e08d" labelColor="rgba(248,255,248,0.8)" />
@@ -89,36 +181,9 @@ export function DashboardView({
           </div>
 
           <EvalScorecard
-            title={liveTargetStats.enabled ? "Live target answer key" : "Seeded proof benchmark"}
-            subtitle={liveTargetStats.enabled
-              ? "This public target repo has planted mistakes, so live model findings can be measured instead of just admired."
-              : "Demo mode is measured against known AI-code mistakes, so recall and noise stay visible."}
-            scores={[
-              {
-                id: "caught",
-                label: "Caught",
-                value: liveTargetStats.enabled ? liveTargetStats.caught : evalScore.caught,
-                max: liveTargetStats.enabled ? liveTargetStats.total : evalScore.seededMistakes,
-                note: liveTargetStats.enabled ? "matched planted target issues" : "raw seeded findings surfaced",
-                tone: "green",
-              },
-              {
-                id: "confirmed",
-                label: "Confirmed",
-                value: liveTargetStats.enabled ? liveTargetStats.confirmed : evalScore.confirmed,
-                max: liveTargetStats.enabled ? Math.max(1, judgedFindings.length) : evalScore.seededMistakes,
-                note: "deduped judge groups with evidence",
-                tone: "blue",
-              },
-              {
-                id: "noise",
-                label: liveTargetStats.enabled ? "Missed" : "Speculative",
-                value: liveTargetStats.enabled ? liveTargetStats.missed : evalScore.speculative,
-                max: liveTargetStats.enabled ? liveTargetStats.total : Math.max(1, judgedFindings.length),
-                note: liveTargetStats.enabled ? "answer-key issues not found yet" : "kept separate from demo claims",
-                tone: (liveTargetStats.enabled ? liveTargetStats.missed : evalScore.speculative) > 2 ? "red" : "amber",
-              },
-            ]}
+            title={scorecardTitle}
+            subtitle={scorecardSubtitle}
+            scores={scorecardScores}
           />
 
           <ContextBudgetCard agents={agents} />

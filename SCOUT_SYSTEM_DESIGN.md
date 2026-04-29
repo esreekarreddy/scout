@@ -221,9 +221,12 @@ When repo files are available, Scout applies candidate patches in a temporary wo
 - the patch format is invalid
 - it cannot apply
 - required checks fail
+- a requested check command is outside Scout's safe allowlist
 - repo context is unavailable for a live run that needs execution
 
 This is the main trust feature. A model-generated patch can look polished and still lose.
+
+Patch checks run with a stripped environment so API keys and repository credentials are not inherited by candidate execution.
 
 The UI also includes a deterministic disqualification proof path. If a live run happens to produce three eligible patches, the demo can still show the execution gate rejecting a deliberately malformed patch without spending model tokens or faking a model failure.
 
@@ -303,9 +306,17 @@ It exposes prompts:
 - `scout-run-patch-tournament`
 - `scout-handoff-to-codex`
 
-This means Scout is usable from MCP-capable clients as a tool layer, not only as a web app. The current MCP path is local stdio. It is not yet packaged as a hosted remote MCP server or marketplace plugin.
+This means Scout is usable from MCP-capable clients as a tool layer, not only as a web app. The current MCP path is local stdio. Seeded eval is offline and deterministic; live `scout_review` and `scout_fix` use public GitHub context plus configured OpenAI model calls. Scout is not yet packaged as a hosted remote MCP server or marketplace plugin.
 
 The current release gate starts Scout through an official MCP SDK client, lists tools/resources/prompts, reads the manifest resource, gets a prompt, calls review/fix/score/handoff/eval tools, and verifies the seeded eval path.
+
+The live MCP smoke command is:
+
+```bash
+npm run scout:mcp -- --smoke-live
+```
+
+It calls `scout_review` and `scout_fix` against the public target repo using the Fast model profile. It requires configured GitHub network access and `OPENAI_API_KEY`.
 
 Scout can also be registered with Codex CLI as:
 

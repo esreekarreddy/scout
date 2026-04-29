@@ -8,14 +8,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, normalize } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize } from "node:path";
 import type { PatchCandidate } from "./types";
 
 export type PatchDisqualificationReason =
   | "apply-failed"
   | "check-failed"
   | "missing-execution"
-  | "repo-context-unavailable";
+  | "repo-context-unavailable"
+  | "unsafe-command";
 
 export interface RepoFileInput {
   path: string;
@@ -111,6 +112,21 @@ async function executeCandidate(
   for (const check of input.checkCommands ?? []) {
     const command = normalizeCheckCommand(check);
     const parsed = parseCommand(command.command);
+    if (!isAllowedCheckCommand(parsed.command)) {
+      const result = syntheticCommandSummary({
+        command: command.command,
+        exitCode: 126,
+        stderr: `Refused unsafe check command: ${parsed.command}`,
+      });
+      checks.push(result);
+      return {
+        candidateId: candidate.id,
+        eligible: false,
+        disqualifiedReason: "unsafe-command",
+        apply,
+        checks,
+      };
+    }
     const result = await runCommand({
       command: parsed.command,
       args: parsed.args,
@@ -324,7 +340,7 @@ function runCommand(input: {
     const child = spawn(input.command, input.args, {
       cwd: input.cwd,
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, CI: "1" },
+      env: safeExecutionEnv(),
     });
     let stdout = "";
     let stderr = "";
@@ -370,6 +386,40 @@ function runCommand(input: {
     if (input.input !== undefined) child.stdin.end(input.input);
     else child.stdin.end();
   });
+}
+
+function syntheticCommandSummary(input: {
+  command: string;
+  exitCode: number;
+  stderr: string;
+}): CommandSummary {
+  return commandSummary({
+    command: input.command,
+    exitCode: input.exitCode,
+    signal: null,
+    durationMs: 0,
+    stdout: "",
+    stderr: input.stderr,
+    timedOut: false,
+  });
+}
+
+function isAllowedCheckCommand(command: string) {
+  const name = basename(command);
+  return command === process.execPath
+    || ["node", "npm", "pnpm", "yarn", "bun", "npx"].includes(name);
+}
+
+function safeExecutionEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    CI: "1",
+    NODE_ENV: "test",
+  };
+  for (const key of ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "ComSpec", "PATHEXT"]) {
+    const value = process.env[key];
+    if (value) env[key] = value;
+  }
+  return env;
 }
 
 function commandSummary(input: {

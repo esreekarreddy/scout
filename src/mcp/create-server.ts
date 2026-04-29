@@ -84,6 +84,12 @@ function asStrategy(value: unknown): FixStrategy | undefined {
   throw new Error("strategy must be conservative, idiomatic, or robust");
 }
 
+function asModelProfile(value: unknown): "fast" | "balanced" | "deep" | undefined {
+  if (value === "fast" || value === "balanced" || value === "deep") return value;
+  if (value === undefined) return undefined;
+  throw new Error("modelProfile must be fast, balanced, or deep");
+}
+
 function asCandidate(value: unknown): Pick<PatchCandidate, "strategy" | "patch"> {
   const candidate = asObject(value);
   const strategy = asStrategy(candidate.strategy);
@@ -131,26 +137,30 @@ function registerScoutTools(server: McpServer) {
     "scout_review",
     {
       title: "Scout Review",
-      description: "Review the seeded demo repo with Scout and return judged findings, eval score, and proof ledger.",
+      description: "Review the seeded demo or a public GitHub repo with Scout and return judged findings, eval score, and proof boundary notes.",
       inputSchema: {
         repo: z.string().describe("Repository URL or demo://ai-written-code-seed"),
+        modelProfile: z.enum(["fast", "balanced", "deep"]).optional().describe("Optional live model profile. Ignored in seeded demo mode."),
       },
     },
-    safeTool(async ({ repo }) => scoutReview(repo)),
+    safeTool(async ({ repo, modelProfile }) => scoutReview(repo, asModelProfile(modelProfile))),
   );
 
   server.registerTool(
     "scout_fix",
     {
       title: "Scout Fix",
-      description: "Generate deterministic Scout patch candidates for a finding in the seeded demo.",
+      description: "Generate Scout patch candidates for a finding. Seeded mode is deterministic; live mode uses configured OpenAI models.",
       inputSchema: {
         repo: z.string().describe("Repository URL or demo://ai-written-code-seed"),
         finding: z.any().describe("Finding object returned by scout_review"),
         strategy: z.enum(["conservative", "idiomatic", "robust"]).optional().describe("Optional repair strategy"),
+        modelProfile: z.enum(["fast", "balanced", "deep"]).optional().describe("Optional live model profile. Ignored in seeded demo mode."),
       },
     },
-    safeTool(async ({ repo, finding, strategy }) => scoutFix(repo, asFinding(finding), asStrategy(strategy))),
+    safeTool(async ({ repo, finding, strategy, modelProfile }) =>
+      scoutFix(repo, asFinding(finding), asStrategy(strategy), asModelProfile(modelProfile))
+    ),
   );
 
   server.registerTool(
