@@ -1,47 +1,43 @@
 # Scout
 
-**The MCP-native patch tournament for AI-written code.**
+**Scout is a verification layer for AI-written code.**
 
-Scout evaluates code produced by coding agents for the failure modes normal PR review is not designed around: hallucinated APIs, fake imports, comments that lie, weak tests, and plausible-looking logic that fails the actual contract.
+Codex, Claude Code, Cursor, and other coding agents can move fast, but they can also create fake imports, weak tests, spec drift, privacy mistakes, and patches that look convincing but fail when applied. Scout sits after the coding agent and before trust.
 
-The product loop is simple: specialist scouts prove the bug, repair agents compete on patches, deterministic gates score the candidates, and Scout returns the winning PR-ready handoff.
+The core loop is:
 
-Every eval run also emits a trace receipt with step checksums and explicit deterministic versus model boundaries, so the demo can prove where each verdict came from.
+```text
+repo or seeded demo -> specialist scouts -> judge -> patch tournament -> execution gate -> agent handoff
+```
+
+Read the full design: [SCOUT_SYSTEM_DESIGN.md](./SCOUT_SYSTEM_DESIGN.md)
 
 Built for the **OpenAI Codex Hackathon - Sydney - 29 April 2026**.
 
-```text
-GitHub repo or seeded demo
-        |
-        v
-Hallucination Scout   Spec Drift Scout   Test Theater Scout
-        \                  |                  /
-         \                 v                 /
-          +---------- Judge layer ----------+
-                         |
-                         v
-              proof ledger + ranked findings
-                         |
-                         v
-        Conservative fix | Idiomatic fix | Robust fix
-                         |
-                         v
-              patch score + receipt + handoff
-```
+## What Is Real Now
 
-## Chosen Hackathon Pathway
+- Web app with seeded demo, live GitHub input, model profiles, scout cards, judge panel, evidence pack, evidence graph, context budget, trace receipt, patch tournament, execution gate, and agent handoff.
+- Next.js API routes for review, fix generation, and patch scoring.
+- Deterministic seeded benchmark with seven planted AI-code failures.
+- Public live target repo designed for real OpenAI/GitHub testing.
+- Official TypeScript SDK MCP server with tools, resources, and prompts.
+- Copyable handoffs for Codex and Claude Code.
+- Eval and QA suite covering core logic, patch execution, evidence graph, MCP client smoke, config templates, and hygiene.
+- Token-aware context path with inspected-file count, estimated tokens, prompt cache key, and OpenAI cached-token telemetry when the API returns it.
 
-Primary lane: **Agentic Coding + Building Evals**.
+## Demo Flow
 
-We are not competing as a generic AI code reviewer. That space is crowded. Scout is positioned as review infrastructure for the Codex era: a system that measures and repairs AI-generated code failures before a human trusts the patch.
+1. Open the app.
+2. Run the seeded AI-code demo or enter a public GitHub repo.
+3. Watch specialist scouts find AI-code failure modes.
+4. Let the judge dedupe and label findings as confirmed, likely, or speculative.
+5. Generate conservative, idiomatic, and robust patches.
+6. Let Scout score and disqualify bad patches.
+7. Copy the handoff to Codex or Claude Code.
 
-Stretch lanes stay optional:
+The strongest demo moment is the patch tournament: a patch can look good but still be disqualified if it cannot apply or does not satisfy the gates.
 
-- **UX for Agentic Applications:** visible pipeline, judge verdicts, patch comparator.
-- **Multimodal Intelligence:** voice bug intake after the core eval loop works.
-- **Domain Agents:** the domain is agentic engineering itself.
-
-## Quickstart
+## Run Locally
 
 ```bash
 pnpm install
@@ -51,237 +47,67 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-For the safest demo path, click **Run seeded AI-code demo**. It uses a deterministic benchmark repo fixture with planted AI-code mistakes, so it works without GitHub rate limits or OpenAI latency for the review pass.
+No key is required for the seeded demo, local MCP smoke test, eval harness, or UI walkthrough.
 
-For live repos, set these in `.env.local`:
+Production URL:
+
+[https://scout.sreekarreddy.com](https://scout.sreekarreddy.com)
+
+For live repo review, set:
 
 ```bash
 OPENAI_API_KEY=your_openai_key
 OPENAI_MODEL=gpt-5.5
+NEXT_PUBLIC_SITE_URL=https://scout.sreekarreddy.com
 GITHUB_TOKEN=your_optional_github_token
 ```
 
-The main live demo target is [https://github.com/esreekarreddy/scout-target-repo](https://github.com/esreekarreddy/scout-target-repo). It is intentionally tiny and flawed, with a known answer key for measuring live model findings.
+The current live target repo is:
 
-The app also exposes a model path selector:
+[https://github.com/esreekarreddy/scout-target-repo](https://github.com/esreekarreddy/scout-target-repo)
 
-- `Fast`: `gpt-5.4-mini` for live demos and iteration.
-- `Balanced`: `gpt-5.5` for the strongest default run.
-- `Deep`: `gpt-5.5-pro` for slower final proof.
+## Official MCP
 
-No key is needed for the deterministic seeded review, MCP smoke test, or UI walkthrough.
+Scout includes a local stdio MCP server built with the official TypeScript MCP SDK.
 
-## Local Verification
-
-```bash
-npm run scout:smoke
-npm run scout:unit
-npm run scout:eval -- --assert
-npm run scout:qa
-npx tsc --noEmit --pretty false
-npm run lint
-npm run build
-```
-
-To start the local tool server in a separate terminal:
+Run the server:
 
 ```bash
 npm run scout:mcp
 ```
 
-## What Is Wired
+That command waits for a client over stdio, so it will not print much by itself. To test the MCP surface end to end:
 
-| surface | what it does |
-| --- | --- |
-| `/` | product UI with live repo input, seeded demo mode, pipeline, eval scorecard, judge panel, Evidence Pack, patch tournament, receipt, and fix modal |
-| `/docs` | in-app explanation of the product, agents, benchmark, and build map |
-| `/strategy` | internal hackathon pathway rationale and stretch feature plan |
-| `POST /api/review` | streams one specialist review agent; seeded demo returns deterministic streams |
-| `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
-| `POST /api/score-patches` | applies completed patch candidates in a temp workspace when repo files are available, then returns execution-aware tournament scores |
-| `src/lib/github.ts` | fetches a bounded GitHub file tree so live review sees README claims, package files, source, and tests without dumping the whole repo |
-| `src/lib/context-budget.ts` | estimates context cost, sets stable prompt cache keys, and surfaces OpenAI usage metadata when live streams finish |
-| `src/lib/model-policy.ts` | maps Fast, Balanced, and Deep model paths to review, fix, and judge use cases |
-| `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
-| `npm run scout:unit` | runs deterministic unit-style checks for judge, eval, tournament, trace, patch execution, and evidence graph behavior |
-| `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, execution summaries, trace receipt, and checksums |
-| `npm run scout:qa` | runs unit checks, eval JSON shape, local tool calls, seeded gates, trace stages, and hygiene rules |
-| `npm run scout:mcp` | starts the local stdio JSON-RPC tool surface for `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, and `scout_eval` |
-
-## Specialist Agents
-
-- **Hallucination Scout:** missing packages, fake imports, nonexistent helpers, impossible framework APIs.
-- **Spec Drift Scout:** README/comment/function-name claims contradicted by implementation.
-- **Test Theater Scout:** tests that pass without proving the contract.
-- **Judge layer:** deterministic dedupe/ranking pass that marks findings as `confirmed`, `likely`, or `speculative`.
-- **Repair agents:** conservative, idiomatic, and robust patch strategies compete against the same finding.
-- **Patch executor:** optional temp-workspace execution applies patch candidates and disqualifies failed apply or failed check runs.
-- **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, adds proof where needed, and survives execution when execution results are supplied.
-- **Evidence graph:** compact graph links repo, findings, files, tests, patches, gates, trace entries, and receipts so model prompts can use focused context instead of whole-repo dumps.
-- **Context budget meter:** shows inspected files, estimated input tokens, stable prompt cache keys, and OpenAI cached-token usage when available.
-- **Live schemas:** live finding, judge, patch metadata, and handoff shapes are validated before use in deterministic helpers.
-- **Live target answer key:** the public `scout-target-repo` fixture lets the UI show caught, missed, and confirmed stats for a real GitHub URL.
-- **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, trace receipt, and pass/warn/fail gates.
-
-## Seeded Benchmark
-
-The built-in demo fixture uses `demo://ai-written-code-seed` and plants seven realistic AI-code mistakes:
-
-- package imported but absent from `package.json`
-- helper called but not defined by any real dependency
-- comment says email is redacted, but raw email is logged
-- auth parser accepts malformed tokens
-- README claims rate limiting exists, but the route has no limiter
-- test uses `toBeTruthy()` instead of asserting exact behavior
-- telemetry test checks that logging happened but not that PII was removed
-
-The UI reports caught/confirmed/speculative counts so the demo is an eval, not just a vague review.
-
-## Winner Pattern Checklist
-
-| pattern | Scout answer |
-| --- | --- |
-| Real domain problem | Agentic software engineering: AI-written code can look correct while hiding fake dependencies, spec drift, weak tests, and security gaps. |
-| Domain credibility | The hackathon workflow is the domain. Scout checks the kind of code Codex-style agents write under time pressure. |
-| Tools, not chat | The tool surface exposes `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, and `scout_eval`. |
-| Real artifact | Each run produces an Evidence Pack, Evidence Graph, ranked findings, competing diffs, execution-aware patch diagnostics, a Tournament Receipt, and a Codex handoff. |
-| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, patch execution gates, trace checksums, graph context, context budget telemetry, unit tests, and QA gates separate evidence from speculation. |
-| Crisp demo moment | The privacy finding proves a contradiction: code logs raw email while the comment says the email is redacted. Robust wins because it fixes code and adds a privacy test. |
-| Deterministic vs model boundary | Seeded benchmark, fixture patches, patch scoring, trace receipts, graph construction, QA checks, and local tool smoke tests are deterministic. Live repo review and live fix generation use the OpenAI API. |
-
-## Demo Artifact
-
-The end state of the demo is a copyable Tournament Receipt:
-
-```text
-Scout Tournament Receipt
-
-Repo: demo://ai-written-code-seed
-Scenario: AI-written auth API
-Known planted failures: 7
-
-Before:
-- audit.ts says email is redacted.
-- auth.ts accepts malformed bearer tokens.
-- README claims rate limiting exists.
-- tests pass without proving privacy or auth behavior.
-
-Scout Evidence:
-- raw email logging is confirmed by code evidence
-- malformed bearer handling is confirmed
-- rate limiting is claimed but missing
-- weak tests are separated from production bugs
-
-Patch Tournament:
-- Conservative: partial fix, loses
-- Idiomatic: useful fix, maybe
-- Robust: fixes the behavior and adds a privacy test, wins
-
-Trace:
-- review, judge, fix, score, and handoff each have input and output checksums
-- deterministic fixture steps are labelled as model: none
-- receipt id links the eval report to the handoff
-
-Execution and graph:
-- patch candidates can be applied in a temp workspace when repo files and checks are supplied
-- failed apply or failed commands cannot win
-- evidence graph keeps focused repo, finding, file, test, patch, gate, trace, and receipt context
-
-After:
-- winning diff removes raw email logging
-- test asserts the raw email is absent
-- handoff is ready for a coding agent or PR workflow
+```bash
+npm run scout:qa:mcp
 ```
 
-## Repo Layout
+Scout exposes:
 
-```text
-src/
-  app/
-    page.tsx                 top-level state machine
-    layout.tsx               metadata and app shell
-    globals.css              design tokens and shared styles
-    docs/page.tsx            in-app docs
-    api/
-      review/route.ts        review stream endpoint
-      fix/route.ts           fix stream endpoint
-      score-patches/route.ts server-side patch apply and score gate
-  lib/
-    demo-fixtures.ts         seeded benchmark and deterministic patches
-    github.ts                bounded GitHub tree ingestion
-    health.ts                trust-score calculation
-    judge.ts                 dedupe, verdicts, eval score
-    live-target.ts           answer key for the public live demo repo
-    evidence-graph.ts        compact graph for focused evidence context
-    prompts.ts               review and fix prompts
-    patch-executor.ts        temp-workspace patch execution gate
-    scout-runner.ts          shared local runner for Scout tools
-    scout-stream.ts          client stream helpers
-    tournament.ts            proof ledger, patch scoring, receipt helpers
-    trace.ts                 deterministic eval trace receipts
-    types.ts                 shared types
-  mcp/
-    server.ts                local stdio JSON-RPC tool server
-  tools/
-    scout-eval.ts            deterministic eval CLI
-scripts/
-  unit-core.ts               judge, eval, tournament, trace unit-style checks
-  unit-patch-executor.ts     executable patch gate checks
-  unit-evidence-graph.ts     graph construction and context checks
-  qa-eval-json-shape.ts      eval report and trace shape gate
-  qa-mcp-tools.ts            local JSON-RPC tool smoke gate
-  qa-hygiene.ts              dash, secret, and wifi-detail hygiene gate
-  components/scout/
-    input-view.tsx           product entry screen
-    dashboard-view.tsx       composed evaluation dashboard
-    pipeline-timeline.tsx    agentic pipeline
-    eval-scorecard.tsx       benchmark score cards
-    evidence-pack.tsx        finding proof and tool trace
-    judge-panel.tsx          ranked judge verdicts
-    patch-tournament.tsx     scored repair competition
-    tournament-receipt.tsx   copyable demo artifact
-    fix-modal.tsx            three repair strategies and tournament result
+- tools: `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, `scout_eval`
+- resources: `scout://demo/manifest`, `scout://eval/seeded`, `scout://handoff/demo`
+- prompts: `scout-review-this-change`, `scout-run-patch-tournament`, `scout-handoff-to-codex`
+
+Example local client configs live in:
+
+- [mcp/codex.local.example.json](./mcp/codex.local.example.json)
+- [mcp/claude-code.local.example.json](./mcp/claude-code.local.example.json)
+
+Important boundary: the MCP server is real and SDK-backed. It is local stdio today. Hosted remote MCP and marketplace-style plugin packaging are next steps.
+
+## Verification
+
+```bash
+npm run scout:smoke
+npm run scout:qa
+npm run scout:eval -- --assert
+npx tsc --noEmit --pretty false
+npm run lint
+npm run build
 ```
 
-## Demo Script
-
-1. Open the app and click **Run seeded AI-code demo**.
-2. Show the three specialist scouts streaming findings in parallel.
-3. Show the judge grouping the seven planted failures into confirmed, likely, and speculative verdicts.
-4. Open the privacy finding: the comment says redacted, but code logs raw email.
-5. Spawn conservative, idiomatic, and robust repair agents.
-6. Show the patch tournament table and why robust wins.
-7. End on the Tournament Receipt and the `scout_handoff` style artifact.
-
-One-line pitch:
-
-> Codex can ship code fast; Scout proves which AI-code finding is real and which repair should win.
-
-Two-minute script:
-
-```text
-0:00-0:10
-AI coding changed the failure modes. Scout reviews code written by agents.
-
-0:10-0:30
-Run the seeded demo. Three scouts inspect hallucinations, spec drift, and test theater.
-
-0:30-0:45
-The judge dedupes findings and marks them confirmed, likely, or speculative.
-
-0:45-1:05
-Open the privacy Evidence Pack. The code logs raw email even though the comment says redacted.
-
-1:05-1:30
-Spawn three repair agents. Scout scores each patch against the same evidence.
-
-1:30-1:45
-Robust wins because it fixes the code and adds the privacy test.
-
-1:45-2:00
-Show the Tournament Receipt. Scout is the eval layer for the codebase you and your AI write together.
-```
+`npm run scout:qa` checks unit behavior, eval JSON shape, official MCP client calls, seeded gates, trace stages, and hygiene rules for dashes, secrets, and wifi details.
 
 ## Hackathon Boundary
 
-This repo began as a pre-event blueprint. For any final submission, the README, write-up, and video must clearly identify what existed before the hackathon and what was built on-site.
+This repository started as a blueprint for the hackathon. For any judged submission, the public write-up and demo must clearly separate pre-event scaffold from on-site hackathon work.

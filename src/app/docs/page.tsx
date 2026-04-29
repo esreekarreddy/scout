@@ -122,6 +122,17 @@ export default function DocsPage() {
           </p>
         </Section>
 
+        <Section title="MCP surface">
+          <p style={textStyle}>
+            Scout also runs as an official TypeScript SDK MCP server over stdio. Coding agents can call
+            <code style={codeStyle}>scout_review</code>, <code style={codeStyle}>scout_fix</code>,{" "}
+            <code style={codeStyle}>scout_score_patch</code>, <code style={codeStyle}>scout_handoff</code>,
+            and <code style={codeStyle}>scout_eval</code>. The server also exposes native resources for
+            the seeded manifest, seeded eval, and demo handoff prompt, plus native prompts for review,
+            patch tournament, and Codex handoff workflows.
+          </p>
+        </Section>
+
         <Section title="Code map">
           <pre
             className="scroll-thin"
@@ -141,6 +152,7 @@ src/lib/judge.ts           dedupe, verdicts, eval score
 src/app/api/review         live or seeded review stream
 src/app/api/fix            live or seeded repair stream
 src/lib/context-budget.ts  token estimate, cache keys, usage telemetry
+src/mcp/server.ts          official SDK MCP tools, resources, prompts
 src/components/scout       modular product UI`}</pre>
         </Section>
       </main>
