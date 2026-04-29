@@ -115,9 +115,15 @@ async function main() {
     }));
     const evalMetrics = evalReport.metrics as { caughtSeeded?: unknown } | undefined;
     const evalGates = evalReport.gates;
+    const patchDiagnostics = evalReport.patchDiagnostics;
     assert(evalMetrics?.caughtSeeded === 7, "scout_eval must catch seven seeded mistakes");
     assert(Array.isArray(evalGates), "scout_eval must return gates");
     assert(evalGates.every((gate) => isObject(gate) && gate.grade !== "fail"), "scout_eval must not return failing gates");
+    assert(Array.isArray(patchDiagnostics), "scout_eval must return patch diagnostics");
+    const executablePatches = patchDiagnostics.filter((diagnostic) =>
+      isObject(diagnostic) && isObject(diagnostic.execution) && diagnostic.execution.eligible === true
+    );
+    assert(executablePatches.length > 0, "scout_eval must prove at least one patch applied in the temp execution gate");
 
     const invalidRepo = await client.callTool({
       name: "scout_eval",
@@ -134,6 +140,10 @@ async function main() {
       prompts: promptNames,
       reviewedFindings: reviewedFindings.length,
       robustPatchScore: score.score,
+      executionGate: {
+        eligiblePatches: executablePatches.length,
+        totalPatches: patchDiagnostics.length,
+      },
       eval: evalReport.id,
     }, null, 2));
     stdout.write("\n");

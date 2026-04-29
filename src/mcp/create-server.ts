@@ -1,8 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { buildEvalReport } from "../lib/eval";
+import { fetchRepoFiles } from "../lib/github";
+import { executePatchTournament } from "../lib/patch-executor";
 import { DEMO_REPO_URL, scoutFix, scoutHandoff, scoutReview, scoutScorePatch } from "../lib/scout-runner";
 import { SEEDED_BENCHMARK_MANIFEST } from "../lib/tournament";
+import type { PatchExecutionResult } from "../lib/patch-executor";
 import type { Finding, FixStrategy, PatchCandidate } from "../lib/types";
 
 type TextResult = {
@@ -106,11 +109,28 @@ export async function runScoutEval(repo: string) {
   const review = await scoutReview(repo);
   const patchCandidates = (await Promise.all(review.judgedFindings.map((finding) => scoutFix(repo, finding))))
     .flatMap((fix) => fix.candidates);
+  const patchExecutions = await buildPatchExecutions(repo, patchCandidates);
   return buildEvalReport({
     repo,
     findings: review.findings,
     patchCandidates,
+    patchExecutions,
     manifest: review.manifest,
+  });
+}
+
+async function buildPatchExecutions(
+  repo: string,
+  patchCandidates: PatchCandidate[],
+): Promise<Record<string, PatchExecutionResult> | undefined> {
+  if (patchCandidates.length === 0) return undefined;
+  const repoFiles = await fetchRepoFiles(repo).catch(() => []);
+  if (repoFiles.length === 0) return undefined;
+  return executePatchTournament({
+    candidates: patchCandidates,
+    repoFiles,
+    checkCommands: [],
+    timeoutMs: 8_000,
   });
 }
 

@@ -3,8 +3,11 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { argv, exit, stderr, stdout } from "node:process";
 import { buildEvalReport, formatEvalReportMarkdown } from "../lib/eval";
+import { fetchRepoFiles } from "../lib/github";
+import { executePatchTournament } from "../lib/patch-executor";
 import { scoutFix, scoutReview, DEMO_REPO_URL } from "../lib/scout-runner";
 import type { EvalReport, EvalThresholds } from "../lib/eval";
+import type { PatchExecutionResult } from "../lib/patch-executor";
 import type { Finding, PatchCandidate } from "../lib/types";
 
 type OutputFormat = "json" | "markdown" | "summary";
@@ -40,10 +43,12 @@ async function main() {
   const options = parseArgs(argv.slice(2));
   const review = await scoutReview(options.repo);
   const patchCandidates = await buildPatchCandidates(options.repo, review.judgedFindings);
+  const patchExecutions = await buildPatchExecutions(options.repo, patchCandidates);
   const report = buildEvalReport({
     repo: options.repo,
     findings: review.findings,
     patchCandidates,
+    patchExecutions,
     manifest: review.manifest,
     thresholds: options.thresholds,
     generatedAt: options.generatedAt,
@@ -77,11 +82,27 @@ async function buildPatchCandidates(repo: string, findings: Finding[]): Promise<
   return candidates;
 }
 
+async function buildPatchExecutions(
+  repo: string,
+  patchCandidates: PatchCandidate[],
+): Promise<Record<string, PatchExecutionResult> | undefined> {
+  if (patchCandidates.length === 0) return undefined;
+  const repoFiles = await fetchRepoFiles(repo).catch(() => []);
+  if (repoFiles.length === 0) return undefined;
+  return executePatchTournament({
+    candidates: patchCandidates,
+    repoFiles,
+    checkCommands: [],
+    timeoutMs: 8_000,
+  });
+}
+
 function formatReport(report: EvalReport, format: OutputFormat) {
   if (format === "json") return JSON.stringify(report, null, 2);
   if (format === "markdown") return formatEvalReportMarkdown(report);
   const bestPatch = report.patchDiagnostics.find((diagnostic) => diagnostic.winner);
   const failingGates = report.gates.filter((gate) => gate.grade === "fail");
+  const executionGate = formatExecutionGateStatus(report);
   return [
     `Scout eval ${report.id}`,
     `Repo: ${report.repo}`,
@@ -89,10 +110,21 @@ function formatReport(report: EvalReport, format: OutputFormat) {
     `Critical recall: ${percent(report.metrics.criticalRecall)}`,
     `Precision: ${percent(report.metrics.precision)} (${report.metrics.extraFindings} extra findings)`,
     `Best patch: ${bestPatch ? `${bestPatch.candidateId} ${bestPatch.score}/100` : "none"}`,
+    `Execution gate: ${executionGate}`,
     `Gates: ${failingGates.length === 0 ? "pass" : `fail ${failingGates.map((gate) => gate.id).join(", ")}`}`,
     `Trace: ${report.trace.id} (${report.traceChecksum})`,
     `Checksum: ${report.checksum}`,
   ].join("\n");
+}
+
+function formatExecutionGateStatus(report: EvalReport) {
+  const diagnosticsWithExecution = report.patchDiagnostics.filter((diagnostic) => diagnostic.execution);
+  if (diagnosticsWithExecution.length === 0) return "not run";
+  const applied = diagnosticsWithExecution.filter((diagnostic) => diagnostic.execution?.apply.exitCode === 0).length;
+  const eligible = diagnosticsWithExecution.filter((diagnostic) => diagnostic.execution?.eligible).length;
+  const total = diagnosticsWithExecution.length;
+  if (eligible > 0) return `pass (${eligible}/${total} eligible, ${applied}/${total} applied in temp workspace)`;
+  return `fail (0/${total} eligible, ${applied}/${total} applied in temp workspace)`;
 }
 
 function parseArgs(args: string[]): CliOptions {
