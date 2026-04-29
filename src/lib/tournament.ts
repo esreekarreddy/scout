@@ -26,12 +26,24 @@ export type AgentHandoffPatch = Pick<
   patch?: string;
 };
 
+export type AgentHandoffPatchOutcome = Pick<
+  PatchScore,
+  "strategy" | "score" | "rank" | "touchedFiles" | "testFiles"
+> & {
+  label?: string;
+  winner?: boolean;
+  eligible?: boolean;
+  disqualifiedReason?: string;
+  detail?: string;
+};
+
 export type AgentHandoffInput = {
   target: AgentHandoffTarget;
   repo?: string;
   receiptId: string;
   finding: Finding;
   winningPatch?: AgentHandoffPatch;
+  patchOutcomes?: AgentHandoffPatchOutcome[];
   modelProfile?: ScoutModelProfile;
   verificationCommands?: string[];
 };
@@ -317,6 +329,7 @@ export function formatTournamentHandoff(receipt: TournamentReceipt): string {
 
 export function formatAgentReceipt(input: Omit<AgentHandoffInput, "target">): string {
   const winningPatch = input.winningPatch;
+  const outcomes = formatPatchOutcomes(input.patchOutcomes);
   return [
     `Scout Tournament Receipt: ${input.receiptId}`,
     input.repo ? `Repo: ${input.repo}` : "",
@@ -328,6 +341,8 @@ export function formatAgentReceipt(input: Omit<AgentHandoffInput, "target">): st
     `Touched files: ${winningPatch?.touchedFiles.length ? winningPatch.touchedFiles.join(", ") : "pending"}`,
     `Test proof: ${winningPatch?.testFiles.length ? winningPatch.testFiles.join(", ") : "pending"}`,
     input.modelProfile ? `Model profile: ${modelProfileSummary(input.modelProfile)}` : "",
+    outcomes.length ? "Patch outcomes:" : "",
+    ...outcomes,
     "Deterministic: verdict grouping, touched files, score, receipt id.",
     "Model-generated: candidate patch text and explanation.",
   ].filter(Boolean).join("\n");
@@ -361,6 +376,9 @@ export function formatHandoffForAgent(input: AgentHandoffInput): string {
     `- Touched files: ${winningPatch?.touchedFiles.length ? winningPatch.touchedFiles.join(", ") : "pending"}`,
     `- Test proof: ${winningPatch?.testFiles.length ? winningPatch.testFiles.join(", ") : "pending"}`,
     winningPatch?.checksum ? `- Score checksum: ${winningPatch.checksum}` : "",
+    input.patchOutcomes?.length ? "" : "",
+    input.patchOutcomes?.length ? "Patch tournament results:" : "",
+    ...(input.patchOutcomes ?? []).map((outcome) => `- ${formatPatchOutcome(outcome)}`),
     "",
     "Instructions:",
     "- Apply only the winning repair unless you find a concrete blocker.",
@@ -522,4 +540,20 @@ function defaultVerificationCommands(winningPatch?: AgentHandoffPatch): string[]
 function modelProfileSummary(profile: ScoutModelProfile): string {
   const cfg = MODEL_PROFILES[profile];
   return `${cfg.label} profile (review ${cfg.review}, fix ${cfg.fix}, judge ${cfg.judge})`;
+}
+
+function formatPatchOutcomes(outcomes?: AgentHandoffPatchOutcome[]): string[] {
+  return (outcomes ?? []).map((outcome) => `- ${formatPatchOutcome(outcome)}`);
+}
+
+function formatPatchOutcome(outcome: AgentHandoffPatchOutcome): string {
+  const label = outcome.label ?? outcome.strategy;
+  const rank = outcome.winner ? "winner" : outcome.rank ? `rank ${outcome.rank}` : "unranked";
+  const gate = outcome.eligible === false
+    ? `disqualified: ${outcome.disqualifiedReason ?? "unknown"}`
+    : outcome.eligible === true
+      ? "eligible"
+      : "not execution-gated";
+  const proof = outcome.testFiles.length ? `test proof ${outcome.testFiles.join(", ")}` : "no test proof";
+  return `${label}: ${outcome.score}/100, ${rank}, ${gate}, ${proof}`;
 }

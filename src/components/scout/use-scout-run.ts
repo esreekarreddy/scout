@@ -73,7 +73,13 @@ export function useScoutRun() {
           setAgents((prev) =>
             prev.map((a, i) =>
               i === idx
-                ? { ...a, status: "done", model: result.model, durationMs: Date.now() - startedAt }
+                ? {
+                  ...a,
+                  status: "done",
+                  model: result.model,
+                  contextBudget: result.contextBudget,
+                  durationMs: Date.now() - startedAt,
+                }
                 : a,
             ),
           );

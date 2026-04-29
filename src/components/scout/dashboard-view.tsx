@@ -16,6 +16,7 @@ import { PipelineTimeline } from "./pipeline-timeline";
 import { EvidencePack } from "./evidence-pack";
 import { EvidenceMap } from "./evidence-map";
 import { TraceReceipt } from "./trace-receipt";
+import { ContextBudgetCard } from "./context-budget-card";
 
 /**
  * The post-launch view: top bar, health summary, 3 agent columns,
@@ -119,6 +120,8 @@ export function DashboardView({
               },
             ]}
           />
+
+          <ContextBudgetCard agents={agents} />
         </div>
 
         {/* [SLOT-1A] · Tier-1 Task 1A: Orchestrator timeline goes here */}

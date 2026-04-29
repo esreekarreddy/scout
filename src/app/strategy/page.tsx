@@ -78,6 +78,8 @@ export default function StrategyPage() {
             API in <code style={codeStyle}>/api/review</code>, and live patch generation uses the OpenAI
             API in <code style={codeStyle}>/api/fix</code>. Once hackathon credits are available, set{" "}
             <code style={codeStyle}>OPENAI_API_KEY</code> and optionally tune <code style={codeStyle}>OPENAI_MODEL</code>.
+            Scout keeps static prompt rules ahead of dynamic repo context and shows cached-token usage
+            when the live model response reports it.
           </p>
         </section>
       </main>

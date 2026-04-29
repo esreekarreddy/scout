@@ -30,6 +30,8 @@ export function FixModal({
   const [serverScores, setServerScores] = useState<PatchScore[]>([]);
   const [executions, setExecutions] = useState<PatchExecutionSummary[]>([]);
   const [executionMode, setExecutionMode] = useState<string>("local-score");
+  const [proofExecution, setProofExecution] = useState<PatchExecutionSummary | null>(null);
+  const [proofRunning, setProofRunning] = useState(false);
   const serverScoringSettled = executionMode !== "local-score";
   const tournament = serverScoringSettled
     ? buildServerPatchTournament(fixers, serverScores, executions)
@@ -95,6 +97,51 @@ export function FixModal({
     navigator.clipboard.writeText(fixers[selectedIndex].patch);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function runDisqualificationProof() {
+    setProofRunning(true);
+    try {
+      const res = await fetch("/api/score-patches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repo,
+          finding,
+          fixers: [{
+            strategy: "conservative",
+            label: "Malformed proof",
+            description: "Deliberately malformed patch used to prove the execution gate rejects bad repairs.",
+            status: "done",
+            patch: [
+              "*** Begin Patch",
+              "*** Update File: src/audit.ts",
+              "-customerEmail: ticket.customerEmail,",
+              "+customerEmail: redactEmail(ticket.customerEmail),",
+              "*** End Patch",
+            ].join("\n"),
+          }],
+        }),
+      });
+      const payload = (await res.json()) as { executions?: PatchExecutionSummary[] };
+      setProofExecution(payload.executions?.[0] ?? {
+        candidateId: "proof.invalid-patch",
+        eligible: false,
+        applySummary: "Patch gate returned no execution proof.",
+        checkSummaries: [],
+        disqualifiedReason: "invalid-patch-schema",
+      });
+    } catch (error) {
+      setProofExecution({
+        candidateId: "proof.invalid-patch",
+        eligible: false,
+        applySummary: error instanceof Error ? error.message : "Could not run proof.",
+        checkSummaries: [],
+        disqualifiedReason: "invalid-patch-schema",
+      });
+    } finally {
+      setProofRunning(false);
+    }
   }
 
   return (
@@ -280,6 +327,28 @@ export function FixModal({
                       </p>
                     </div>
                   ))}
+                  <div style={{ border: "1px dashed var(--border-strong)", borderRadius: 8, padding: 10, background: "var(--canvas)", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <p style={{ fontWeight: 800, fontSize: 12 }}>Execution failure proof</p>
+                      <p style={{ color: "var(--ink-2)", fontSize: 11, marginTop: 3 }}>
+                        Runs the same schema gate against a deliberately malformed patch. No model call.
+                      </p>
+                    </div>
+                    <button className="btn-ghost" type="button" onClick={runDisqualificationProof} disabled={proofRunning} style={{ padding: "6px 10px", fontSize: 12 }}>
+                      {proofRunning ? "Checking..." : "Show disqualification"}
+                    </button>
+                  </div>
+                  {proofExecution && (
+                    <div style={{ border: "1px solid var(--red-border)", borderRadius: 8, padding: 10, background: "var(--red-surface)" }}>
+                      <p style={{ fontWeight: 800, fontSize: 12, overflowWrap: "anywhere" }}>{proofExecution.candidateId}</p>
+                      <p style={{ color: "var(--red)", fontSize: 12, marginTop: 3 }}>
+                        {proofExecution.eligible ? "eligible" : `disqualified: ${proofExecution.disqualifiedReason ?? "unknown"}`}
+                      </p>
+                      <p style={{ color: "var(--ink-2)", fontSize: 11, marginTop: 5, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap" }}>
+                        {proofExecution.applySummary}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </section>
             )}

@@ -4,6 +4,7 @@ import { fetchRepoContext } from "@/lib/github";
 import { AGENTS, buildReviewMessage } from "@/lib/prompts";
 import { getDemoReviewStream, isDemoRepo } from "@/lib/demo-fixtures";
 import { normalizeModelProfile, selectModel } from "@/lib/model-policy";
+import { buildContextBudget, buildPromptCacheKey, contextBudgetHeaders, encodeContextUsageTelemetry } from "@/lib/context-budget";
 import type { Aspect, ScoutModelProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -20,7 +21,17 @@ export async function POST(req: Request) {
   if (!agent) return new Response("Unknown aspect", { status: 400 });
 
   if (isDemoRepo(repo)) {
-    return streamPlainText(getDemoReviewStream(aspect), 28);
+    const model = "deterministic-seed";
+    const budget = buildContextBudget({
+      repoContext: getDemoContextForBudget(),
+      model,
+      modelProfile: "env",
+    });
+    return streamPlainText(getDemoReviewStream(aspect), 28, {
+      "X-Scout-Model": model,
+      "X-Scout-Model-Profile": "demo",
+      ...contextBudgetHeaders(budget),
+    });
   }
 
   let repoContext = "";
@@ -32,19 +43,42 @@ export async function POST(req: Request) {
 
   const profile = normalizeModelProfile(modelProfile);
   const model = selectModel({ profile, task: "review", fallback: process.env.OPENAI_MODEL });
+  const promptCacheKey = buildPromptCacheKey("review", aspect);
+  const budget = buildContextBudget({ repoContext, model, modelProfile: profile ?? "env", promptCacheKey });
   const result = streamText({
     model: openai(model),
     system: agent.system,
     messages: [{ role: "user", content: buildReviewMessage(repoContext) }],
+    providerOptions: {
+      openai: {
+        promptCacheKey,
+      },
+    },
   });
 
   return streamPlainText(result.textStream, 0, {
     "X-Scout-Model": model,
     "X-Scout-Model-Profile": profile ?? "env",
-  });
+    ...contextBudgetHeaders(budget),
+  }, result.totalUsage);
 }
 
-function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0, headers: Record<string, string> = {}) {
+function getDemoContextForBudget() {
+  return [
+    "// src/auth.ts",
+    "// src/audit.ts",
+    "// src/routes.ts",
+    "// test/auth.test.ts",
+    "// README.md",
+  ].join("\n");
+}
+
+function streamPlainText(
+  source: AsyncIterable<string> | string,
+  delayMs = 0,
+  headers: Record<string, string> = {},
+  usage?: PromiseLike<unknown>,
+) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -58,6 +92,11 @@ function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0, he
         for await (const chunk of source) {
           controller.enqueue(encoder.encode(chunk));
         }
+      }
+
+      if (usage) {
+        const telemetryLine = await usage.then(encodeContextUsageTelemetry, () => undefined);
+        if (telemetryLine) controller.enqueue(encoder.encode(`\n${telemetryLine}\n`));
       }
       controller.close();
     },

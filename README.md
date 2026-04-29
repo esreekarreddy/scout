@@ -100,6 +100,7 @@ npm run scout:mcp
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
 | `POST /api/score-patches` | applies completed patch candidates in a temp workspace when repo files are available, then returns execution-aware tournament scores |
 | `src/lib/github.ts` | fetches a bounded GitHub file tree so live review sees README claims, package files, source, and tests without dumping the whole repo |
+| `src/lib/context-budget.ts` | estimates context cost, sets stable prompt cache keys, and surfaces OpenAI usage metadata when live streams finish |
 | `src/lib/model-policy.ts` | maps Fast, Balanced, and Deep model paths to review, fix, and judge use cases |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
 | `npm run scout:unit` | runs deterministic unit-style checks for judge, eval, tournament, trace, patch execution, and evidence graph behavior |
@@ -117,6 +118,7 @@ npm run scout:mcp
 - **Patch executor:** optional temp-workspace execution applies patch candidates and disqualifies failed apply or failed check runs.
 - **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, adds proof where needed, and survives execution when execution results are supplied.
 - **Evidence graph:** compact graph links repo, findings, files, tests, patches, gates, trace entries, and receipts so model prompts can use focused context instead of whole-repo dumps.
+- **Context budget meter:** shows inspected files, estimated input tokens, stable prompt cache keys, and OpenAI cached-token usage when available.
 - **Live schemas:** live finding, judge, patch metadata, and handoff shapes are validated before use in deterministic helpers.
 - **Live target answer key:** the public `scout-target-repo` fixture lets the UI show caught, missed, and confirmed stats for a real GitHub URL.
 - **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, trace receipt, and pass/warn/fail gates.
@@ -143,7 +145,7 @@ The UI reports caught/confirmed/speculative counts so the demo is an eval, not j
 | Domain credibility | The hackathon workflow is the domain. Scout checks the kind of code Codex-style agents write under time pressure. |
 | Tools, not chat | The tool surface exposes `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, and `scout_eval`. |
 | Real artifact | Each run produces an Evidence Pack, Evidence Graph, ranked findings, competing diffs, execution-aware patch diagnostics, a Tournament Receipt, and a Codex handoff. |
-| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, patch execution gates, trace checksums, graph context, unit tests, and QA gates separate evidence from speculation. |
+| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, patch execution gates, trace checksums, graph context, context budget telemetry, unit tests, and QA gates separate evidence from speculation. |
 | Crisp demo moment | The privacy finding proves a contradiction: code logs raw email while the comment says the email is redacted. Robust wins because it fixes code and adds a privacy test. |
 | Deterministic vs model boundary | Seeded benchmark, fixture patches, patch scoring, trace receipts, graph construction, QA checks, and local tool smoke tests are deterministic. Live repo review and live fix generation use the OpenAI API. |
 

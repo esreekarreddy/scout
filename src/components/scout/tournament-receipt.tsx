@@ -56,15 +56,31 @@ export function TournamentReceipt({
       patch: fixers.find((fixer) => fixer.strategy === winner.strategy)?.patch,
     }
     : undefined;
+  const executionByCandidate = new Map((executions ?? []).map((execution) => [execution.candidateId, execution]));
+  const patchOutcomes = scores.map((score) => {
+    const execution = executionByCandidate.get(score.id);
+    return {
+      strategy: score.strategy,
+      label: score.label,
+      score: score.score,
+      rank: score.rank,
+      winner: score.winner,
+      touchedFiles: score.touchedFiles,
+      testFiles: score.testFiles,
+      eligible: execution?.eligible,
+      disqualifiedReason: execution?.disqualifiedReason,
+      detail: execution?.applySummary,
+    };
+  });
   const checklist = [
     finding.verdict === "confirmed" ? "Finding confirmed by judge layer" : "Finding carried forward with fallback verdict",
     winner ? `${winner.label} ranked first by tournament scorer` : "Patch ranking pending",
     winner?.testFiles.length ? "Winning patch includes test proof" : "Test proof still needs review",
     winner ? `${winner.touchedFiles.length || 0} touched file(s) captured for handoff` : "Touched files pending",
   ];
-  const receiptText = formatAgentReceipt({ repo, receiptId: id, finding, winningPatch: winnerPatch, modelProfile });
-  const codexText = formatHandoffForAgent({ target: "codex", repo, receiptId: id, finding, winningPatch: winnerPatch, modelProfile });
-  const claudeText = formatHandoffForAgent({ target: "claude-code", repo, receiptId: id, finding, winningPatch: winnerPatch, modelProfile });
+  const receiptText = formatAgentReceipt({ repo, receiptId: id, finding, winningPatch: winnerPatch, patchOutcomes, modelProfile });
+  const codexText = formatHandoffForAgent({ target: "codex", repo, receiptId: id, finding, winningPatch: winnerPatch, patchOutcomes, modelProfile });
+  const claudeText = formatHandoffForAgent({ target: "claude-code", repo, receiptId: id, finding, winningPatch: winnerPatch, patchOutcomes, modelProfile });
 
   function copyText(text: string, target: "receipt" | "codex" | "claude") {
     void navigator.clipboard.writeText(text);

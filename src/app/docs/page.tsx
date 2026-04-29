@@ -114,6 +114,14 @@ export default function DocsPage() {
           </div>
         </Section>
 
+        <Section title="Context budget">
+          <p style={textStyle}>
+            Live review keeps static scout rules at the front of each prompt and repo-specific context at
+            the end. The app shows inspected files, estimated input tokens, stable prompt cache keys, and
+            OpenAI usage metadata when the stream returns it, including cached input tokens.
+          </p>
+        </Section>
+
         <Section title="Code map">
           <pre
             className="scroll-thin"
@@ -132,6 +140,7 @@ src/lib/prompts.ts         specialist scout and repair prompts
 src/lib/judge.ts           dedupe, verdicts, eval score
 src/app/api/review         live or seeded review stream
 src/app/api/fix            live or seeded repair stream
+src/lib/context-budget.ts  token estimate, cache keys, usage telemetry
 src/components/scout       modular product UI`}</pre>
         </Section>
       </main>

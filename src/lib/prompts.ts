@@ -26,8 +26,8 @@ Each JSON object must match this schema:
 
 const PATCH_OUTPUT_CONTRACT = `Output contract:
 - Output ONLY a unified diff.
-- The first non-empty line must be "--- a/<path>".
-- The next file header must be "+++ b/<path>".
+- The first non-empty line must be "--- a/<path>" or "--- /dev/null" for a new file.
+- The next file header must be "+++ b/<path>" or "+++ /dev/null" for a deleted file.
 - Use "@@" hunk headers and normal unified-diff context.
 - Do not output markdown fences, JSON, prose, "diff --git", "*** Begin Patch", "*** End Patch", or tool-call syntax.`;
 

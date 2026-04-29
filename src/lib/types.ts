@@ -42,6 +42,24 @@ export interface AgentState {
   findings: Finding[];
   model?: string;
   durationMs?: number;
+  contextBudget?: ContextBudget;
+}
+
+export interface ContextBudget {
+  contextChars: number;
+  estimatedInputTokens: number;
+  inspectedFiles: number;
+  model?: string;
+  modelProfile?: string;
+  cacheHint: string;
+  promptCacheKey?: string;
+  measuredInputTokens?: number;
+  measuredOutputTokens?: number;
+  measuredTotalTokens?: number;
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
+  noCacheTokens?: number;
+  usageSource?: string;
 }
 
 export interface SeededMistake {

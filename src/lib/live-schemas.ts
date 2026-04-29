@@ -35,7 +35,7 @@ export const liveFixerPatchSchema = z.object({
   findingId: z.string().min(1),
   strategy: z.enum(["conservative", "idiomatic", "robust"]),
   patch: z.string().min(1).refine((patch) => hasStrictUnifiedDiffShape(patch), {
-    message: "patch must be a plain unified diff starting with --- a/<path>, +++ b/<path>, and at least one @@ hunk",
+    message: "patch must be a plain unified diff with ordered file headers and at least one @@ hunk",
   }),
   metadata: livePatchMetadataSchema.optional(),
 });
@@ -119,7 +119,7 @@ function hasStrictUnifiedDiffShape(patch: string): boolean {
   if (/```|\*\*\* Begin Patch|\*\*\* End Patch|^diff --git\b/m.test(patch)) return false;
   const lines = patch.split("\n");
   const firstContent = lines.findIndex((line) => line.trim().length > 0);
-  if (firstContent < 0 || !/^--- a\/.+/.test(lines[firstContent].trim())) return false;
+  if (firstContent < 0 || !isOldFileHeader(lines[firstContent])) return false;
 
   let index = firstContent;
   let sawHunk = false;
@@ -127,19 +127,19 @@ function hasStrictUnifiedDiffShape(patch: string): boolean {
     while (index < lines.length && lines[index].trim().length === 0) index += 1;
     if (index >= lines.length) break;
 
-    const oldMatch = /^--- a\/(.+)$/.exec(lines[index].trim());
-    if (!oldMatch) return false;
+    const oldPath = readOldFileHeader(lines[index]);
+    if (!oldPath) return false;
     index += 1;
     if (index >= lines.length) return false;
 
-    const newMatch = /^\+\+\+ b\/(.+)$/.exec(lines[index].trim());
-    if (!newMatch || oldMatch[1] !== newMatch[1]) return false;
+    const newPath = readNewFileHeader(lines[index]);
+    if (!newPath || !compatiblePatchPaths(oldPath, newPath)) return false;
     index += 1;
 
     let fileHasHunk = false;
     while (index < lines.length) {
       const line = lines[index];
-      if (/^--- a\/.+/.test(line.trim())) break;
+      if (isOldFileHeader(line)) break;
       if (line.startsWith("@@")) {
         fileHasHunk = true;
         sawHunk = true;
@@ -161,6 +161,29 @@ function hasStrictUnifiedDiffShape(patch: string): boolean {
   }
 
   return sawHunk;
+}
+
+function isOldFileHeader(line: string): boolean {
+  return readOldFileHeader(line) !== undefined;
+}
+
+function readOldFileHeader(line: string): string | undefined {
+  const trimmed = line.trim();
+  if (trimmed === "--- /dev/null") return "/dev/null";
+  const match = /^--- a\/(.+)$/.exec(trimmed);
+  return match?.[1];
+}
+
+function readNewFileHeader(line: string): string | undefined {
+  const trimmed = line.trim();
+  if (trimmed === "+++ /dev/null") return "/dev/null";
+  const match = /^\+\+\+ b\/(.+)$/.exec(trimmed);
+  return match?.[1];
+}
+
+function compatiblePatchPaths(oldPath: string, newPath: string): boolean {
+  if (oldPath === "/dev/null" && newPath === "/dev/null") return false;
+  return oldPath === "/dev/null" || newPath === "/dev/null" || oldPath === newPath;
 }
 
 function riskNotes(patch: string) {

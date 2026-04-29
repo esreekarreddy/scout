@@ -1,4 +1,5 @@
 import type { Aspect, Finding, FixStrategy, ScoutModelProfile } from "./types";
+import { contextBudgetFromHeaders, mergeContextUsageTelemetry, parseContextUsageTelemetryLine } from "./context-budget";
 import { parseFindingLine } from "./prompts";
 
 /**
@@ -13,7 +14,7 @@ export async function streamAgent(
   modelProfile: ScoutModelProfile,
   onChunk: (chunk: string) => void,
   onFinding: (f: Omit<Finding, "id" | "aspect">) => void,
-): Promise<{ model?: string }> {
+): Promise<{ model?: string; contextBudget?: ReturnType<typeof contextBudgetFromHeaders> }> {
   const res = await fetch("/api/review", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -21,6 +22,8 @@ export async function streamAgent(
   });
   if (!res.ok || !res.body) throw new Error(`API error ${res.status}`);
   const model = res.headers.get("X-Scout-Model") ?? undefined;
+  const contextBudget = contextBudgetFromHeaders(res.headers);
+  let usageTelemetry: ReturnType<typeof parseContextUsageTelemetryLine>;
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -31,20 +34,34 @@ export async function streamAgent(
     if (done) break;
     const chunk = decoder.decode(value, { stream: true });
     buffer += chunk;
-    onChunk(chunk);
 
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
     for (const line of lines) {
-      const f = parseFindingLine(line.trim());
+      const trimmed = line.trim();
+      const telemetry = parseContextUsageTelemetryLine(trimmed);
+      if (telemetry) {
+        usageTelemetry = telemetry;
+        continue;
+      }
+
+      onChunk(`${line}\n`);
+      const f = parseFindingLine(trimmed);
       if (f) onFinding(f);
     }
   }
   if (buffer.trim()) {
-    const f = parseFindingLine(buffer.trim());
+    const trimmed = buffer.trim();
+    const telemetry = parseContextUsageTelemetryLine(trimmed);
+    if (telemetry) {
+      usageTelemetry = telemetry;
+    } else {
+      onChunk(buffer);
+    }
+    const f = telemetry ? null : parseFindingLine(trimmed);
     if (f) onFinding(f);
   }
-  return { model };
+  return { model, contextBudget: mergeContextUsageTelemetry(contextBudget, usageTelemetry) };
 }
 
 /**

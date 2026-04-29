@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 import { exit, stderr, stdout } from "node:process";
+import {
+  buildContextBudget,
+  buildPromptCacheKey,
+  contextUsageTelemetryFromUsage,
+  encodeContextUsageTelemetry,
+  mergeContextUsageTelemetry,
+  parseContextUsageTelemetryLine,
+} from "../src/lib/context-budget";
 import { buildEvalReport, formatEvalReportMarkdown } from "../src/lib/eval";
 import { patchMetadataFromDiff, validateLiveFinding, validateLiveFixerPatch } from "../src/lib/live-schemas";
 import { calcEvalScore, judgeFindings } from "../src/lib/judge";
@@ -27,6 +35,8 @@ async function main() {
   await testExtraFindingsStayOutOfSeededRecall();
   testLiveSchemas();
   testAgentHandoffFormatting();
+  testContextBudget();
+  testContextUsageTelemetry();
   testStructuredFindingParserAndLiveTargetStats();
   testGeneratedArtifactHygiene();
 
@@ -38,6 +48,8 @@ async function main() {
       "extra-finding-accounting",
       "live-schema-validation",
       "agent-handoff-formatting",
+      "context-budget",
+      "context-usage-telemetry",
       "structured-live-target-stats",
       "generated-artifact-hygiene",
     ],
@@ -259,6 +271,20 @@ function testLiveSchemas() {
   });
   assert(fixerPatch.strategy === "robust", "fixer patch schema must preserve strategy");
 
+  const newFilePatch = validateLiveFixerPatch({
+    findingId: "privacy.finding",
+    strategy: "robust",
+    patch: [
+      "--- /dev/null",
+      "+++ b/test/privacy.test.ts",
+      "@@",
+      "+test('redacts email', () => {",
+      "+  expect(redactEmail('ada@example.com')).not.toContain('ada@example.com');",
+      "+});",
+    ].join("\n"),
+  });
+  assert(newFilePatch.strategy === "robust", "fixer patch schema must allow new test files");
+
   let invalidPatchRejected = false;
   try {
     validateLiveFixerPatch({
@@ -384,6 +410,103 @@ function testAgentHandoffFormatting() {
   assert(codex.includes("target repo's relevant test command"), "agent handoff must include target repo test guidance");
   assert(codex.includes("```diff"), "agent handoff must include winning patch text");
   assert(!FORBIDDEN_DASH.test(receipt + codex + claude), "agent handoff text must not contain em or en dashes");
+
+  const outcomeHandoff = formatHandoffForAgent({
+    target: "codex",
+    repo: DEMO_REPO_URL,
+    receiptId: "receipt.unit",
+    finding: privacyFinding,
+    winningPatch,
+    modelProfile: "fast",
+    patchOutcomes: [
+      {
+        strategy: "robust",
+        label: "Robust",
+        score: 91,
+        rank: 1,
+        winner: true,
+        touchedFiles: ["src/audit.ts", "test/auth.test.ts"],
+        testFiles: ["test/auth.test.ts"],
+        eligible: true,
+      },
+      {
+        strategy: "conservative",
+        label: "Conservative",
+        score: 0,
+        rank: 0,
+        touchedFiles: [],
+        testFiles: [],
+        eligible: false,
+        disqualifiedReason: "invalid-patch-schema",
+      },
+    ],
+  });
+  assert(outcomeHandoff.includes("Patch tournament results"), "agent handoff must include patch outcome ledger");
+  assert(outcomeHandoff.includes("disqualified: invalid-patch-schema"), "agent handoff must include disqualification reason");
+}
+
+function testContextBudget() {
+  const promptCacheKey = buildPromptCacheKey("review", "hallucination");
+  const budget = buildContextBudget({
+    repoContext: [
+      "// Repo: owner/repo",
+      "// Context mode: bounded GitHub tree",
+      "// src/audit.ts",
+      "export const x = 1;",
+      "---",
+      "// test/audit.test.ts",
+      "expect(x).toBe(1);",
+    ].join("\n"),
+    model: "gpt-5.4-mini",
+    modelProfile: "fast",
+    promptCacheKey,
+  });
+
+  assert(budget.inspectedFiles === 2, "context budget must count inspected source files");
+  assert(budget.estimatedInputTokens > 0, "context budget must estimate input tokens");
+  assert(budget.cacheHint.includes("Static scout rules"), "context budget must explain cache posture");
+  assert(budget.promptCacheKey === "scout-review-hallucination-v1", "context budget must carry stable prompt cache key");
+}
+
+function testContextUsageTelemetry() {
+  const telemetry = contextUsageTelemetryFromUsage({
+    inputTokens: 2048,
+    outputTokens: 300,
+    totalTokens: 2348,
+    inputTokenDetails: {
+      cacheReadTokens: 1024,
+      cacheWriteTokens: 0,
+      noCacheTokens: 1024,
+    },
+  });
+
+  assert(telemetry?.measuredInputTokens === 2048, "usage telemetry must read measured input tokens");
+  assert(telemetry?.cachedInputTokens === 1024, "usage telemetry must read cached input tokens");
+  assert(telemetry?.noCacheTokens === 1024, "usage telemetry must read non-cached input tokens");
+
+  const rawTelemetry = contextUsageTelemetryFromUsage({
+    raw: {
+      prompt_tokens: 2006,
+      completion_tokens: 300,
+      total_tokens: 2306,
+      prompt_tokens_details: {
+        cached_tokens: 1920,
+      },
+    },
+  });
+
+  assert(rawTelemetry?.cachedInputTokens === 1920, "usage telemetry must read provider cached token metadata");
+
+  const line = encodeContextUsageTelemetry(rawTelemetry);
+  assert(Boolean(line?.startsWith("SCOUT_USAGE|")), "usage telemetry must encode as a hidden stream line");
+  const parsed = parseContextUsageTelemetryLine(line!);
+  assert(parsed?.measuredInputTokens === 2006, "usage telemetry must parse hidden stream line");
+
+  const merged = mergeContextUsageTelemetry(
+    buildContextBudget({ repoContext: "// src/audit.ts\nexport {}", model: "gpt-5.5", modelProfile: "balanced" }),
+    parsed,
+  );
+  assert(merged?.cachedInputTokens === 1920, "usage telemetry must merge into context budget");
 }
 
 function testGeneratedArtifactHygiene() {
