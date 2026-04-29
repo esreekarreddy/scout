@@ -163,7 +163,8 @@ export default function DocsPage() {
             Seeded MCP eval is offline and deterministic. Live <code style={codeStyle}>scout_review</code>{" "}
             and <code style={codeStyle}>scout_fix</code> use the same bounded GitHub context and configured
             OpenAI model path as the web app. The repeatable live smoke command is{" "}
-            <code style={codeStyle}>npm run scout:mcp -- --smoke-live</code>.
+            <code style={codeStyle}>npm run scout:mcp -- --smoke-live</code>; it requires network access and{" "}
+            <code style={codeStyle}>OPENAI_API_KEY</code>.
           </p>
         </Section>
 

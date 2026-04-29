@@ -325,7 +325,7 @@ codex mcp add scout -- npm --silent run scout:mcp
 codex mcp get scout
 ```
 
-For reliable local use, launch Codex from this repo root or configure an absolute working directory in the client config.
+For reliable local use, launch Codex from this repo root or configure an absolute working directory in the client config. The checked-in files under `mcp/` are templates, not proof that every named client has been tested in this environment.
 
 ## How Developers Use It
 
@@ -466,7 +466,7 @@ The verified MCP smoke reports:
 - resources: 3
 - prompts: 3
 - seeded mistakes caught: 7
-- eval id: `eval.a050d019`
+- execution gate: at least one patch applies in the temporary workspace
 
 ## What To Claim In A Demo
 
@@ -555,7 +555,7 @@ Positive impact:
 
 ## Current Tradeoffs
 
-The web app is the strongest demo surface today. The MCP server is real and SDK-backed, but it is local stdio rather than hosted remote MCP.
+The web app is the strongest visual demo surface today. The MCP server is real and SDK-backed, with offline seeded eval plus live review/fix tools when credentials are configured. It is local stdio rather than hosted remote MCP.
 
 The public web app deploys on Vercel at `https://scout.sreekarreddy.com`. The local MCP server still runs on the developer machine because stdio MCP is a client-local tool integration.
 
@@ -563,7 +563,7 @@ The seeded benchmark is intentionally small. That makes it reliable for a 2-minu
 
 Live repo review is bounded for speed and cost. Scout fetches a selected file tree instead of indexing the entire repository.
 
-The local MCP runner currently supports the deterministic seeded path most strongly. Live GitHub and OpenAI paths are strongest through the Next.js web/API routes.
+The local MCP runner supports the deterministic seeded path without credentials, which is why it is the default release gate. The live MCP path uses the same bounded GitHub and OpenAI review/fix code as the web/API routes, but it requires network access and `OPENAI_API_KEY`.
 
 There is no database yet. That is the right choice for the hackathon demo because receipts, traces, and evals are generated on demand. A database becomes useful later for saved runs, teams, auth, historical comparison, and deployed collaboration.
 

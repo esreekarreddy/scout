@@ -94,12 +94,12 @@ Scout exposes:
 - resources: `scout://demo/manifest`, `scout://eval/seeded`, `scout://handoff/demo`
 - prompts: `scout-review-this-change`, `scout-run-patch-tournament`, `scout-handoff-to-codex`
 
-Example local client configs live in:
+Example local client config templates live in:
 
 - [mcp/codex.local.example.json](./mcp/codex.local.example.json)
 - [mcp/claude-code.local.example.json](./mcp/claude-code.local.example.json)
 
-Important boundary: the MCP server is real and SDK-backed. It is local stdio today. Hosted remote MCP and marketplace-style plugin packaging are next steps.
+The MCP server is SDK-backed and runs over local stdio. `npm run scout:qa:mcp` verifies it through an official MCP SDK client. Remote MCP hosting and packaged plugin distribution are roadmap items.
 
 ## Verification
 
@@ -113,7 +113,3 @@ npm run build
 ```
 
 `npm run scout:qa` checks unit behavior, eval JSON shape, official MCP client calls, seeded gates, trace stages, and hygiene rules for dashes, secrets, and wifi details.
-
-## Hackathon Boundary
-
-This repository started as a blueprint for the hackathon. For any judged submission, the public write-up and demo must clearly separate pre-event scaffold from on-site hackathon work.
