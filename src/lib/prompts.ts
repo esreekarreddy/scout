@@ -24,6 +24,13 @@ Each JSON object must match this schema:
   "evidence": "short code quote or exact observed behavior"
 }`;
 
+const PATCH_OUTPUT_CONTRACT = `Output contract:
+- Output ONLY a unified diff.
+- The first non-empty line must be "--- a/<path>".
+- The next file header must be "+++ b/<path>".
+- Use "@@" hunk headers and normal unified-diff context.
+- Do not output markdown fences, JSON, prose, "diff --git", "*** Begin Patch", "*** End Patch", or tool-call syntax.`;
+
 /**
  * Each agent gets a different lens on the same codebase.
  * Findings must be emitted as pipe-delimited lines so the client can parse them
@@ -128,7 +135,7 @@ Given a repo context and a finding about AI-written code, produce a unified diff
 - Preserves all existing behavior except the bug
 - Adds no formatting or refactoring changes
 
-Output ONLY a valid unified diff, starting with "--- a/<path>" and "+++ b/<path>". No prose, no markdown fence.`,
+${PATCH_OUTPUT_CONTRACT}`,
   },
   {
     key: "idiomatic",
@@ -143,7 +150,7 @@ Given a repo context and a finding about AI-written code, produce a unified diff
 - Preserves the existing file/module structure
 - Updates related files only if existing patterns require it
 
-Output ONLY a valid unified diff. No prose, no markdown fence.`,
+${PATCH_OUTPUT_CONTRACT}`,
   },
   {
     key: "robust",
@@ -159,7 +166,7 @@ Given a repo context and a finding about AI-written code, produce a unified diff
 - Adds proper TypeScript types if the touched function is public
 - Adds JSDoc on any new public surface
 
-Output ONLY a valid unified diff. No prose, no markdown fence.`,
+${PATCH_OUTPUT_CONTRACT}`,
   },
 ];
 

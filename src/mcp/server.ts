@@ -151,6 +151,10 @@ async function handleRequest(req: JsonRpcRequest) {
     };
   }
 
+  if (req.method?.startsWith("notifications/")) {
+    return null;
+  }
+
   if (req.method === "tools/list") {
     return { tools: TOOLS };
   }
@@ -188,9 +192,10 @@ async function handleLine(line: string) {
   }
 
   try {
-    writeResponse(req.id, await handleRequest(req));
+    const result = await handleRequest(req);
+    if (req.id !== undefined) writeResponse(req.id, result);
   } catch (error) {
-    writeError(req.id, error);
+    if (req.id !== undefined) writeError(req.id, error);
   }
 }
 

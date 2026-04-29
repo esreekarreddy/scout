@@ -63,7 +63,11 @@ export async function streamFixer(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repo, finding, strategy, modelProfile }),
   });
-  if (!res.ok || !res.body) throw new Error(`API error ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text ? `API error ${res.status}: ${text}` : `API error ${res.status}`);
+  }
+  if (!res.body) throw new Error("API error: empty patch stream");
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

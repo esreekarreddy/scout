@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { AgentState, Finding } from "@/lib/types";
+import type { AgentState, Finding, ScoutModelProfile } from "@/lib/types";
 import { calcHealth } from "@/lib/health";
 import { calcEvalScore, judgeFindings } from "@/lib/judge";
 import { calcLiveTargetStats } from "@/lib/live-target";
@@ -31,12 +31,14 @@ import { TraceReceipt } from "./trace-receipt";
  */
 export function DashboardView({
   repo,
+  modelProfile,
   agents,
   allDone,
   onReset,
   onFix,
 }: {
   repo: string;
+  modelProfile: ScoutModelProfile;
   agents: AgentState[];
   allDone: boolean;
   onReset: () => void;
@@ -53,7 +55,7 @@ export function DashboardView({
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      <TopBar repo={repo} onReset={onReset} />
+      <TopBar repo={repo} modelProfile={modelProfile} onReset={onReset} />
 
       <main style={{ flex: 1, maxWidth: 1320, margin: "0 auto", width: "100%", padding: "28px 24px" }}>
         {/* [SLOT-2C] · Tier-2 Task 2C: Trend sparkline goes here */}

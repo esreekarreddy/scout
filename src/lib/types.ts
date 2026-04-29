@@ -13,6 +13,7 @@ export interface FixerState {
   description: string;
   status: AgentStatus;
   patch: string;
+  errorMessage?: string;
 }
 
 /** A single finding emitted by an agent, pipe-delimited in stream */

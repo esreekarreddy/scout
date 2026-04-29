@@ -11,7 +11,11 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import type { PatchCandidate } from "./types";
 
-export type PatchDisqualificationReason = "apply-failed" | "check-failed" | "missing-execution";
+export type PatchDisqualificationReason =
+  | "apply-failed"
+  | "check-failed"
+  | "missing-execution"
+  | "repo-context-unavailable";
 
 export interface RepoFileInput {
   path: string;

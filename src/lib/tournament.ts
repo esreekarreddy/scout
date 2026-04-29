@@ -1,5 +1,6 @@
 import { DEMO_REPO_URL } from "./demo-fixtures";
 import { judgeFindings } from "./judge";
+import { MODEL_PROFILES } from "./model-policy";
 import type {
   BenchmarkManifest,
   Finding,
@@ -8,11 +9,32 @@ import type {
   PatchScoreBreakdown,
   ProofLedger,
   ProofLedgerEntry,
+  ScoutModelProfile,
   SeededMistake,
   TournamentHandoff,
   TournamentReceipt,
 } from "./types";
 import type { PatchExecutionResult } from "./patch-executor";
+
+export type AgentHandoffTarget = "codex" | "claude-code";
+
+export type AgentHandoffPatch = Pick<
+  PatchScore,
+  "strategy" | "score" | "touchedFiles" | "testFiles" | "checksum"
+> & {
+  label?: string;
+  patch?: string;
+};
+
+export type AgentHandoffInput = {
+  target: AgentHandoffTarget;
+  repo?: string;
+  receiptId: string;
+  finding: Finding;
+  winningPatch?: AgentHandoffPatch;
+  modelProfile?: ScoutModelProfile;
+  verificationCommands?: string[];
+};
 
 const SEEDED_MISTAKES: SeededMistake[] = [
   {
@@ -293,6 +315,79 @@ export function formatTournamentHandoff(receipt: TournamentReceipt): string {
   ].join("\n");
 }
 
+export function formatAgentReceipt(input: Omit<AgentHandoffInput, "target">): string {
+  const winningPatch = input.winningPatch;
+  return [
+    `Scout Tournament Receipt: ${input.receiptId}`,
+    input.repo ? `Repo: ${input.repo}` : "",
+    `Finding: ${input.finding.title}`,
+    `Location: ${input.finding.file}${input.finding.line ? `:${input.finding.line}` : ""}`,
+    `Verdict: ${input.finding.verdict ?? "pending"}`,
+    `Winner: ${winningPatch?.label ?? winningPatch?.strategy ?? "pending"}`,
+    `Score: ${winningPatch ? `${winningPatch.score}/100` : "pending"}`,
+    `Touched files: ${winningPatch?.touchedFiles.length ? winningPatch.touchedFiles.join(", ") : "pending"}`,
+    `Test proof: ${winningPatch?.testFiles.length ? winningPatch.testFiles.join(", ") : "pending"}`,
+    input.modelProfile ? `Model profile: ${modelProfileSummary(input.modelProfile)}` : "",
+    "Deterministic: verdict grouping, touched files, score, receipt id.",
+    "Model-generated: candidate patch text and explanation.",
+  ].filter(Boolean).join("\n");
+}
+
+export function formatHandoffForAgent(input: AgentHandoffInput): string {
+  const targetName = input.target === "codex" ? "Codex" : "Claude Code";
+  const winningPatch = input.winningPatch;
+  const commands = input.verificationCommands?.length
+    ? input.verificationCommands
+    : defaultVerificationCommands(winningPatch);
+  const evidence = input.finding.evidence ?? input.finding.description;
+  const patchText = winningPatch?.patch?.trim();
+
+  return [
+    `Use this Scout receipt to repair the code with ${targetName}.`,
+    "",
+    "Scout verdict:",
+    `- Receipt: ${input.receiptId}`,
+    input.repo ? `- Repo: ${input.repo}` : "",
+    `- Finding: ${input.finding.title}`,
+    `- Location: ${input.finding.file}${input.finding.line ? `:${input.finding.line}` : ""}`,
+    `- Severity: ${input.finding.severity}`,
+    `- Verdict: ${input.finding.verdict ?? "pending"}`,
+    `- Evidence: ${evidence}`,
+    input.modelProfile ? `- Model profile used by Scout: ${modelProfileSummary(input.modelProfile)}` : "",
+    "",
+    "Winning repair:",
+    `- Strategy: ${winningPatch?.label ?? winningPatch?.strategy ?? "pending"}`,
+    `- Score: ${winningPatch ? `${winningPatch.score}/100` : "pending"}`,
+    `- Touched files: ${winningPatch?.touchedFiles.length ? winningPatch.touchedFiles.join(", ") : "pending"}`,
+    `- Test proof: ${winningPatch?.testFiles.length ? winningPatch.testFiles.join(", ") : "pending"}`,
+    winningPatch?.checksum ? `- Score checksum: ${winningPatch.checksum}` : "",
+    "",
+    "Instructions:",
+    "- Apply only the winning repair unless you find a concrete blocker.",
+    "- Keep the patch narrowly scoped to the evidence above.",
+    "- Do not invent new dependencies, helpers, APIs, or test results.",
+    "- Preserve the Scout receipt id in your final summary.",
+    "- Add or keep a regression test when behavior changes.",
+    "",
+    "Verification commands:",
+    ...commands.map((command) => `- ${command}`),
+    "",
+    "Do not claim:",
+    "- Do not claim a production security audit.",
+    "- Do not claim hosted MCP integration unless a real client call was tested.",
+    "- Do not claim live accuracy beyond the repo and run represented by this receipt.",
+    patchText
+      ? [
+        "",
+        "Winning patch text:",
+        "```diff",
+        patchText,
+        "```",
+      ].join("\n")
+      : "",
+  ].filter(Boolean).join("\n");
+}
+
 export function proofHash(value: unknown): string {
   const input = stableJson(value);
   let hash = 2166136261;
@@ -414,4 +509,17 @@ function stableJson(value: unknown): string {
     .sort()
     .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
     .join(",")}}`;
+}
+
+function defaultVerificationCommands(winningPatch?: AgentHandoffPatch): string[] {
+  const commands = new Set<string>();
+  if (winningPatch?.testFiles.length) commands.add("Run the target repo's relevant test command for the touched test files");
+  commands.add("Run the target repo's typecheck or build command if one exists");
+  commands.add("Run the target repo's lint command if one exists");
+  return [...commands];
+}
+
+function modelProfileSummary(profile: ScoutModelProfile): string {
+  const cfg = MODEL_PROFILES[profile];
+  return `${cfg.label} profile (review ${cfg.review}, fix ${cfg.fix}, judge ${cfg.judge})`;
 }

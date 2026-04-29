@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Finding, FixerState, PatchExecutionSummary, PatchScore } from "@/lib/types";
-import { buildLocalPatchTournament, PatchTournament } from "./patch-tournament";
+import type { Finding, FixerState, PatchExecutionSummary, PatchScore, ScoutModelProfile } from "@/lib/types";
+import { buildLocalPatchTournament, buildServerPatchTournament, PatchTournament } from "./patch-tournament";
 import { TournamentReceipt } from "./tournament-receipt";
 
 /**
@@ -16,11 +16,13 @@ export function FixModal({
   repo,
   finding,
   fixers,
+  modelProfile,
   onClose,
 }: {
   repo: string;
   finding: Finding;
   fixers: FixerState[];
+  modelProfile: ScoutModelProfile;
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
@@ -28,24 +30,26 @@ export function FixModal({
   const [serverScores, setServerScores] = useState<PatchScore[]>([]);
   const [executions, setExecutions] = useState<PatchExecutionSummary[]>([]);
   const [executionMode, setExecutionMode] = useState<string>("local-score");
-  const tournament = serverScores.length > 0
-    ? serverScores.map((score) => ({
-      id: score.candidateId,
-      strategy: score.strategy,
-      label: fixers.find((fixer) => fixer.strategy === score.strategy)?.label ?? score.strategy,
-      status: "done" as const,
-      score: score.score,
-      rank: score.rank,
-      winner: score.winner,
-      touchedFiles: score.touchedFiles,
-      testFiles: score.testFiles,
-      breakdown: score.breakdown,
-      checksum: score.checksum,
-    }))
+  const serverScoringSettled = executionMode !== "local-score";
+  const tournament = serverScoringSettled
+    ? buildServerPatchTournament(fixers, serverScores, executions)
     : buildLocalPatchTournament(finding, fixers);
   const winner = tournament.find((score) => score.winner);
+  const noEligiblePatch = serverScoringSettled
+    && tournament.length > 0
+    && !tournament.some((score) => score.status === "done" && score.score > 0);
   const winnerIndex = winner ? fixers.findIndex((fixer) => fixer.strategy === winner.strategy) : -1;
   const selectedIndex = selected ?? (winnerIndex >= 0 ? winnerIndex : null);
+  const selectedFixer = selectedIndex === null ? undefined : fixers[selectedIndex];
+  const selectedRow = selectedFixer ? tournament.find((score) => score.strategy === selectedFixer.strategy) : undefined;
+  const selectedEligible = Boolean(selectedRow && selectedRow.status === "done" && selectedRow.score > 0);
+  const footerMessage = noEligiblePatch
+    ? "Scout rejected every completed patch. Regenerate fixes before handing this back to an agent."
+    : selectedIndex === null
+      ? "Scout will auto-pick the tournament winner once enough patches complete."
+      : !selectedEligible
+        ? "Selected patch is not eligible. Pick an eligible patch or regenerate fixes."
+      : `Selected: ${fixers[selectedIndex].label} - patch and receipt ready.`;
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -87,7 +91,7 @@ export function FixModal({
   }, [repo, finding, fixers]);
 
   function copySelected() {
-    if (selectedIndex === null) return;
+    if (selectedIndex === null || !selectedEligible) return;
     navigator.clipboard.writeText(fixers[selectedIndex].patch);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -204,8 +208,20 @@ export function FixModal({
                         {fx.patch}
                       </pre>
                     ) : (
-                      <p style={{ fontSize: 12, color: "var(--ink-3)", textAlign: "center", padding: "40px 0" }}>
-                        {fx.status === "idle" ? "Queued..." : "Generating patch..."}
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: fx.status === "error" ? "var(--red)" : "var(--ink-3)",
+                          textAlign: "center",
+                          padding: "40px 0",
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {fx.status === "idle"
+                          ? "Queued..."
+                          : fx.status === "error"
+                            ? fx.errorMessage ?? "Patch generation failed."
+                            : "Generating patch..."}
                       </p>
                     )}
                   </div>
@@ -233,7 +249,14 @@ export function FixModal({
           </div>
 
           <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-            <PatchTournament finding={finding} fixers={fixers} serverScores={serverScores} executionMode={executionMode} />
+            <PatchTournament
+              finding={finding}
+              fixers={fixers}
+              serverScores={serverScores}
+              executions={executions}
+              executionMode={executionMode}
+              serverScoringSettled={serverScoringSettled}
+            />
             {executions.length > 0 && (
               <section className="card" style={{ padding: "14px 16px", borderRadius: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
@@ -260,7 +283,15 @@ export function FixModal({
                 </div>
               </section>
             )}
-            <TournamentReceipt finding={finding} fixers={fixers} serverScores={serverScores} />
+            <TournamentReceipt
+              repo={repo}
+              finding={finding}
+              fixers={fixers}
+              modelProfile={modelProfile}
+              serverScores={serverScores}
+              executions={executions}
+              serverScoringSettled={serverScoringSettled}
+            />
           </div>
         </div>
 
@@ -276,15 +307,13 @@ export function FixModal({
           }}
         >
           <p style={{ fontSize: 12, color: "var(--ink-2)" }}>
-            {selectedIndex === null
-              ? "Scout will auto-pick the tournament winner once enough patches complete."
-              : `Selected: ${fixers[selectedIndex].label} - patch and receipt ready.`}
+            {footerMessage}
           </p>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn-ghost" onClick={copySelected} disabled={selectedIndex === null}>
+            <button className="btn-ghost" onClick={copySelected} disabled={!selectedEligible}>
               {copied ? "Copied!" : "Copy patch"}
             </button>
-            <button className="btn-primary" disabled={selectedIndex === null} title="Stretch: wire this to GitHub PR creation after the demo loop is stable">
+            <button className="btn-primary" disabled={!selectedEligible} title="Stretch: wire this to GitHub PR creation after the demo loop is stable">
               Receipt-ready diff
             </button>
           </div>

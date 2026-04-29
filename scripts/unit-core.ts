@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { exit, stderr, stdout } from "node:process";
 import { buildEvalReport, formatEvalReportMarkdown } from "../src/lib/eval";
-import { patchMetadataFromDiff, validateLiveFinding } from "../src/lib/live-schemas";
+import { patchMetadataFromDiff, validateLiveFinding, validateLiveFixerPatch } from "../src/lib/live-schemas";
 import { calcEvalScore, judgeFindings } from "../src/lib/judge";
 import { calcLiveTargetStats, SCOUT_TARGET_REPO_URL } from "../src/lib/live-target";
 import { parseFindingLine } from "../src/lib/prompts";
@@ -10,6 +10,8 @@ import {
   SEEDED_BENCHMARK_MANIFEST,
   buildProofLedger,
   buildTournamentReceipt,
+  formatAgentReceipt,
+  formatHandoffForAgent,
   formatTournamentHandoff,
   scorePatchTournament,
 } from "../src/lib/tournament";
@@ -24,6 +26,7 @@ async function main() {
   await testSeededEvalTournamentAndTrace();
   await testExtraFindingsStayOutOfSeededRecall();
   testLiveSchemas();
+  testAgentHandoffFormatting();
   testStructuredFindingParserAndLiveTargetStats();
   testGeneratedArtifactHygiene();
 
@@ -34,6 +37,7 @@ async function main() {
       "seeded-eval-tournament-trace",
       "extra-finding-accounting",
       "live-schema-validation",
+      "agent-handoff-formatting",
       "structured-live-target-stats",
       "generated-artifact-hygiene",
     ],
@@ -241,6 +245,145 @@ function testLiveSchemas() {
   });
   assert(metadata.touchedFiles.includes("src/audit.ts"), "patch metadata must include touched source file");
   assert(metadata.testFiles.includes("test/auth.test.ts"), "patch metadata must include touched test file");
+
+  const fixerPatch = validateLiveFixerPatch({
+    findingId: "privacy.finding",
+    strategy: "robust",
+    patch: [
+      "--- a/src/audit.ts",
+      "+++ b/src/audit.ts",
+      "@@",
+      "-logger.info(user.email)",
+      "+logger.info(redactEmail(user.email))",
+    ].join("\n"),
+  });
+  assert(fixerPatch.strategy === "robust", "fixer patch schema must preserve strategy");
+
+  let invalidPatchRejected = false;
+  try {
+    validateLiveFixerPatch({
+      findingId: "privacy.finding",
+      strategy: "robust",
+      patch: "logger.info(redactEmail(user.email))",
+    });
+  } catch {
+    invalidPatchRejected = true;
+  }
+  assert(invalidPatchRejected, "fixer patch schema must reject non-diff patch text");
+
+  let fencedPatchRejected = false;
+  try {
+    validateLiveFixerPatch({
+      findingId: "privacy.finding",
+      strategy: "robust",
+      patch: [
+        "```diff",
+        "--- a/src/audit.ts",
+        "+++ b/src/audit.ts",
+        "@@",
+        "-logger.info(user.email)",
+        "+logger.info(redactEmail(user.email))",
+        "```",
+      ].join("\n"),
+    });
+  } catch {
+    fencedPatchRejected = true;
+  }
+  assert(fencedPatchRejected, "fixer patch schema must reject fenced patch text");
+
+  let missingHunkRejected = false;
+  try {
+    validateLiveFixerPatch({
+      findingId: "privacy.finding",
+      strategy: "robust",
+      patch: [
+        "--- a/src/audit.ts",
+        "+++ b/src/audit.ts",
+        "-logger.info(user.email)",
+        "+logger.info(redactEmail(user.email))",
+      ].join("\n"),
+    });
+  } catch {
+    missingHunkRejected = true;
+  }
+  assert(missingHunkRejected, "fixer patch schema must reject diffs without hunk headers");
+
+  let mismatchedHeaderRejected = false;
+  try {
+    validateLiveFixerPatch({
+      findingId: "privacy.finding",
+      strategy: "robust",
+      patch: [
+        "--- a/src/audit.ts",
+        "+++ b/src/routes.ts",
+        "@@",
+        "-logger.info(user.email)",
+        "+logger.info(redactEmail(user.email))",
+      ].join("\n"),
+    });
+  } catch {
+    mismatchedHeaderRejected = true;
+  }
+  assert(mismatchedHeaderRejected, "fixer patch schema must reject mismatched file headers");
+}
+
+function testAgentHandoffFormatting() {
+  const privacyFinding = finding({
+    id: "privacy.spec",
+    aspect: "spec-drift",
+    severity: "critical",
+    file: "src/audit.ts",
+    line: 5,
+    title: "Comment says email is redacted but raw email is logged",
+    confidence: 98,
+  });
+  const winningPatch = {
+    strategy: "robust" as const,
+    label: "Robust",
+    score: 91,
+    touchedFiles: ["src/audit.ts", "test/auth.test.ts"],
+    testFiles: ["test/auth.test.ts"],
+    checksum: "abc123",
+    patch: [
+      "--- a/src/audit.ts",
+      "+++ b/src/audit.ts",
+      "@@",
+      "-logger.info(user.email)",
+      "+logger.info(redactEmail(user.email))",
+    ].join("\n"),
+  };
+  const receipt = formatAgentReceipt({
+    repo: DEMO_REPO_URL,
+    receiptId: "receipt.unit",
+    finding: privacyFinding,
+    winningPatch,
+    modelProfile: "fast",
+  });
+  const codex = formatHandoffForAgent({
+    target: "codex",
+    repo: DEMO_REPO_URL,
+    receiptId: "receipt.unit",
+    finding: privacyFinding,
+    winningPatch,
+    modelProfile: "fast",
+  });
+  const claude = formatHandoffForAgent({
+    target: "claude-code",
+    repo: DEMO_REPO_URL,
+    receiptId: "receipt.unit",
+    finding: privacyFinding,
+    winningPatch,
+    modelProfile: "fast",
+  });
+
+  assert(receipt.includes("Model profile: Fast profile"), "receipt must include selected model profile");
+  assert(receipt.includes("review gpt-5.4-mini"), "receipt must include resolved review model");
+  assert(codex.includes("Codex"), "Codex handoff must name Codex");
+  assert(claude.includes("Claude Code"), "Claude handoff must name Claude Code");
+  assert(codex.includes("receipt.unit"), "agent handoff must preserve receipt id");
+  assert(codex.includes("target repo's relevant test command"), "agent handoff must include target repo test guidance");
+  assert(codex.includes("```diff"), "agent handoff must include winning patch text");
+  assert(!FORBIDDEN_DASH.test(receipt + codex + claude), "agent handoff text must not contain em or en dashes");
 }
 
 function testGeneratedArtifactHygiene() {

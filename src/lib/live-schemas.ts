@@ -31,6 +31,15 @@ export const livePatchMetadataSchema = z.object({
   riskNotes: z.array(z.string()).default([]),
 });
 
+export const liveFixerPatchSchema = z.object({
+  findingId: z.string().min(1),
+  strategy: z.enum(["conservative", "idiomatic", "robust"]),
+  patch: z.string().min(1).refine((patch) => hasStrictUnifiedDiffShape(patch), {
+    message: "patch must be a plain unified diff starting with --- a/<path>, +++ b/<path>, and at least one @@ hunk",
+  }),
+  metadata: livePatchMetadataSchema.optional(),
+});
+
 export const liveHandoffSchema = z.object({
   title: z.string().min(1),
   summary: z.string().min(1),
@@ -45,6 +54,7 @@ export type LiveFinding = z.infer<typeof liveFindingSchema>;
 export type LiveFindingEnvelope = z.infer<typeof liveFindingEnvelopeSchema>;
 export type LiveJudgeVerdict = z.infer<typeof liveJudgeVerdictSchema>;
 export type LivePatchMetadata = z.infer<typeof livePatchMetadataSchema>;
+export type LiveFixerPatch = z.infer<typeof liveFixerPatchSchema>;
 export type LiveHandoff = z.infer<typeof liveHandoffSchema>;
 
 export function validateLiveFinding(value: unknown): LiveFinding {
@@ -57,6 +67,10 @@ export function validateLiveFindingEnvelope(value: unknown): LiveFindingEnvelope
 
 export function validateLivePatchMetadata(value: unknown): LivePatchMetadata {
   return livePatchMetadataSchema.parse(value);
+}
+
+export function validateLiveFixerPatch(value: unknown): LiveFixerPatch {
+  return liveFixerPatchSchema.parse(value);
 }
 
 export function validateLiveHandoff(value: unknown): LiveHandoff {
@@ -99,6 +113,54 @@ function extractTouchedFiles(patch: string): string[] {
     files.add(match[1].replace(/\\/g, "/"));
   }
   return [...files].sort();
+}
+
+function hasStrictUnifiedDiffShape(patch: string): boolean {
+  if (/```|\*\*\* Begin Patch|\*\*\* End Patch|^diff --git\b/m.test(patch)) return false;
+  const lines = patch.split("\n");
+  const firstContent = lines.findIndex((line) => line.trim().length > 0);
+  if (firstContent < 0 || !/^--- a\/.+/.test(lines[firstContent].trim())) return false;
+
+  let index = firstContent;
+  let sawHunk = false;
+  while (index < lines.length) {
+    while (index < lines.length && lines[index].trim().length === 0) index += 1;
+    if (index >= lines.length) break;
+
+    const oldMatch = /^--- a\/(.+)$/.exec(lines[index].trim());
+    if (!oldMatch) return false;
+    index += 1;
+    if (index >= lines.length) return false;
+
+    const newMatch = /^\+\+\+ b\/(.+)$/.exec(lines[index].trim());
+    if (!newMatch || oldMatch[1] !== newMatch[1]) return false;
+    index += 1;
+
+    let fileHasHunk = false;
+    while (index < lines.length) {
+      const line = lines[index];
+      if (/^--- a\/.+/.test(line.trim())) break;
+      if (line.startsWith("@@")) {
+        fileHasHunk = true;
+        sawHunk = true;
+      }
+      if (
+        line.trim().length > 0
+        && !line.startsWith("@@")
+        && !line.startsWith(" ")
+        && !line.startsWith("+")
+        && !line.startsWith("-")
+        && !line.startsWith("\\ No newline")
+      ) {
+        return false;
+      }
+      index += 1;
+    }
+
+    if (!fileHasHunk) return false;
+  }
+
+  return sawHunk;
 }
 
 function riskNotes(patch: string) {

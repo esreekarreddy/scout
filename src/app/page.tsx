@@ -32,6 +32,7 @@ export default function Home() {
     <>
       <DashboardView
         repo={repo}
+        modelProfile={modelProfile}
         agents={agents}
         allDone={allDone}
         onReset={() => {
@@ -42,7 +43,7 @@ export default function Home() {
       />
 
       {fixingFinding && (
-        <FixModal repo={repo} finding={fixingFinding} fixers={fixers} onClose={closeFixers} />
+        <FixModal repo={repo} finding={fixingFinding} fixers={fixers} modelProfile={modelProfile} onClose={closeFixers} />
       )}
     </>
   );

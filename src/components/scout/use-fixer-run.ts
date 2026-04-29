@@ -38,9 +38,10 @@ export function useFixerRun(repo: string, modelProfile: ScoutModelProfile) {
           setFixers((prev) =>
             prev.map((x, i) => (i === idx ? { ...x, status: "done" } : x)),
           );
-        } catch {
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
           setFixers((prev) =>
-            prev.map((x, i) => (i === idx ? { ...x, status: "error" } : x)),
+            prev.map((x, i) => (i === idx ? { ...x, status: "error", errorMessage: message } : x)),
           );
         }
       }),

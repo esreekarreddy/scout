@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { Finding, FixerState, PatchScore } from "@/lib/types";
-import { buildLocalPatchTournament } from "./patch-tournament";
+import { formatAgentReceipt, formatHandoffForAgent } from "@/lib/tournament";
+import type { Finding, FixerState, PatchExecutionSummary, PatchScore, ScoutModelProfile } from "@/lib/types";
+import { buildLocalPatchTournament, buildServerPatchTournament } from "./patch-tournament";
 
 function receiptId(finding: Finding, winnerStrategy: string) {
   const raw = `${finding.id}:${finding.file}:${winnerStrategy}`;
@@ -15,86 +16,60 @@ function receiptId(finding: Finding, winnerStrategy: string) {
 }
 
 export function TournamentReceipt({
+  repo,
   finding,
   fixers,
+  modelProfile,
   serverScores,
+  executions,
+  serverScoringSettled,
 }: {
+  repo: string;
   finding: Finding;
   fixers: FixerState[];
+  modelProfile: ScoutModelProfile;
   serverScores?: PatchScore[];
+  executions?: PatchExecutionSummary[];
+  serverScoringSettled?: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
-  const scores = serverScores?.length
-    ? serverScores.map((score) => ({
-      id: score.candidateId,
-      strategy: score.strategy,
-      label: fixers.find((fixer) => fixer.strategy === score.strategy)?.label ?? score.strategy,
-      status: "done" as const,
-      score: score.score,
-      rank: score.rank,
-      winner: score.winner,
-      touchedFiles: score.touchedFiles,
-      testFiles: score.testFiles,
-      breakdown: score.breakdown,
-      checksum: score.checksum,
-    }))
+  const [copiedTarget, setCopiedTarget] = useState<"receipt" | "codex" | "claude" | null>(null);
+  const useServerScores = Boolean(serverScoringSettled || serverScores?.length);
+  const scores = useServerScores
+    ? buildServerPatchTournament(fixers, serverScores ?? [], executions)
     : buildLocalPatchTournament(finding, fixers);
   const winner = scores.find((score) => score.winner);
-  const completed = scores.filter((score) => score.status === "done").length;
+  const hasExecutionGate = Boolean(executions?.length);
+  const metricLabel = hasExecutionGate ? "Eligible" : useServerScores ? "Scored" : "Completed";
+  const metricValue = hasExecutionGate
+    ? (executions ?? []).filter((execution) => execution.eligible).length
+    : scores.filter((score) => score.status === "done").length;
+  const metricTotal = hasExecutionGate ? executions?.length ?? 0 : scores.length;
   const id = receiptId(finding, winner?.strategy ?? "pending");
+  const winnerPatch = winner
+    ? {
+      strategy: winner.strategy,
+      label: winner.label,
+      score: winner.score,
+      touchedFiles: winner.touchedFiles,
+      testFiles: winner.testFiles,
+      checksum: winner.checksum,
+      patch: fixers.find((fixer) => fixer.strategy === winner.strategy)?.patch,
+    }
+    : undefined;
   const checklist = [
     finding.verdict === "confirmed" ? "Finding confirmed by judge layer" : "Finding carried forward with fallback verdict",
     winner ? `${winner.label} ranked first by tournament scorer` : "Patch ranking pending",
     winner?.testFiles.length ? "Winning patch includes test proof" : "Test proof still needs review",
     winner ? `${winner.touchedFiles.length || 0} touched file(s) captured for handoff` : "Touched files pending",
   ];
-  const receiptText = [
-    `Scout Tournament Receipt: ${id}`,
-    `Finding: ${finding.title}`,
-    `Location: ${finding.file}${finding.line ? `:${finding.line}` : ""}`,
-    `Verdict: ${finding.verdict ?? "pending"}`,
-    `Winner: ${winner ? winner.label : "pending"}`,
-    `Score: ${winner ? `${winner.score}/100` : "pending"}`,
-    `Touched files: ${winner?.touchedFiles.length ? winner.touchedFiles.join(", ") : "pending"}`,
-    `Test proof: ${winner?.testFiles.length ? winner.testFiles.join(", ") : "pending"}`,
-    "Deterministic: verdict grouping, touched files, score, receipt id.",
-    "Model-generated: candidate patch text and explanation.",
-  ].join("\n");
-  const codexText = [
-    "Use this Scout receipt to repair the code.",
-    "",
-    `Finding: ${finding.title}`,
-    `Location: ${finding.file}${finding.line ? `:${finding.line}` : ""}`,
-    `Evidence: ${finding.evidence ?? finding.description}`,
-    `Winning strategy: ${winner ? winner.label : "pending"}`,
-    `Score: ${winner ? `${winner.score}/100` : "pending"}`,
-    `Touched files: ${winner?.touchedFiles.length ? winner.touchedFiles.join(", ") : "pending"}`,
-    "",
-    "Instructions:",
-    "- Apply only the winning repair unless you find a concrete blocker.",
-    "- Preserve the evidence trail.",
-    "- Add or keep a test proving the failure mode.",
-    "- Run the repo verification commands before claiming done.",
-  ].join("\n");
-  const claudeText = [
-    "Scout found an evidence-backed issue in AI-written code.",
-    "",
-    `Task: fix ${finding.title}`,
-    `File: ${finding.file}${finding.line ? `:${finding.line}` : ""}`,
-    `Why: ${finding.description}`,
-    `Preferred repair: ${winner ? winner.label : "pending"}`,
-    "",
-    "Constraints:",
-    "- Keep the patch narrowly scoped.",
-    "- Do not invent new dependencies.",
-    "- Add a regression test when the winning patch touches behavior.",
-    "- Explain any deviation from the Scout receipt.",
-  ].join("\n");
+  const receiptText = formatAgentReceipt({ repo, receiptId: id, finding, winningPatch: winnerPatch, modelProfile });
+  const codexText = formatHandoffForAgent({ target: "codex", repo, receiptId: id, finding, winningPatch: winnerPatch, modelProfile });
+  const claudeText = formatHandoffForAgent({ target: "claude-code", repo, receiptId: id, finding, winningPatch: winnerPatch, modelProfile });
 
-  function copyText(text: string) {
+  function copyText(text: string, target: "receipt" | "codex" | "claude") {
     void navigator.clipboard.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
+    setCopiedTarget(target);
+    window.setTimeout(() => setCopiedTarget(null), 1400);
   }
 
   return (
@@ -110,8 +85,8 @@ export function TournamentReceipt({
           <p style={{ fontFamily: "var(--font-mono)", color: "var(--ink-3)", fontSize: 11, textAlign: "right" }}>
             {id}
           </p>
-          <button className="btn-ghost" type="button" onClick={() => copyText(receiptText)} style={{ padding: "5px 10px", fontSize: 12 }}>
-            {copied ? "Copied" : "Copy receipt"}
+          <button className="btn-ghost" type="button" onClick={() => copyText(receiptText, "receipt")} style={{ padding: "5px 10px", fontSize: 12 }}>
+            {copiedTarget === "receipt" ? "Copied" : "Copy receipt"}
           </button>
         </div>
       </div>
@@ -139,8 +114,8 @@ export function TournamentReceipt({
           <p style={{ marginTop: 5, fontWeight: 800, fontSize: 16 }}>{winner ? winner.score : "-"}</p>
         </div>
         <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 10, background: "var(--canvas)" }}>
-          <p style={{ color: "var(--ink-3)", fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>Completed</p>
-          <p style={{ marginTop: 5, fontWeight: 800, fontSize: 16 }}>{completed}/{scores.length}</p>
+          <p style={{ color: "var(--ink-3)", fontSize: 11, fontWeight: 800, textTransform: "uppercase" }}>{metricLabel}</p>
+          <p style={{ marginTop: 5, fontWeight: 800, fontSize: 16 }}>{metricValue}/{metricTotal}</p>
         </div>
       </div>
 
@@ -191,11 +166,11 @@ export function TournamentReceipt({
       </pre>
 
       <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn-ghost" type="button" onClick={() => copyText(codexText)} style={{ padding: "7px 11px", fontSize: 12 }}>
-          Send this to Codex
+        <button className="btn-ghost" type="button" onClick={() => copyText(codexText, "codex")} style={{ padding: "7px 11px", fontSize: 12 }}>
+          {copiedTarget === "codex" ? "Copied for Codex" : "Send this to Codex"}
         </button>
-        <button className="btn-ghost" type="button" onClick={() => copyText(claudeText)} style={{ padding: "7px 11px", fontSize: 12 }}>
-          Send this to Claude Code
+        <button className="btn-ghost" type="button" onClick={() => copyText(claudeText, "claude")} style={{ padding: "7px 11px", fontSize: 12 }}>
+          {copiedTarget === "claude" ? "Copied for Claude" : "Send this to Claude Code"}
         </button>
       </div>
     </section>

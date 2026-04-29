@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "scout": {
+      "command": "npm",
+      "args": ["--silent", "run", "scout:mcp"],
+      "cwd": "<absolute path to openai-codex-hackathon>"
+    }
+  }
+}

@@ -46,8 +46,10 @@ async function main() {
     const initialized = await client.request("initialize", {});
     assertObject(initialized, "initialize result");
     assert((initialized.serverInfo as { name?: string }).name === "scout-local", "server name must be scout-local");
+    client.notify("notifications/initialized", {});
 
     const listed = await client.request("tools/list", {}) as ToolListResult;
+    assert(client.unexpectedResponses.length === 0, "server must not emit responses for JSON-RPC notifications");
     assertToolList(listed);
 
     const review = parseToolEnvelope(await client.request("tools/call", {
@@ -121,6 +123,7 @@ class JsonRpcLineClient {
     resolve: (response: JsonRpcResponse) => void;
     reject: (error: Error) => void;
   }>();
+  readonly unexpectedResponses: JsonRpcResponse[] = [];
 
   constructor(private readonly child: ChildProcessWithoutNullStreams) {
     child.stdout.setEncoding("utf8");
@@ -164,6 +167,11 @@ class JsonRpcLineClient {
     });
   }
 
+  notify(method: string, params: unknown) {
+    const payload = { jsonrpc: "2.0", method, params };
+    this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+  }
+
   private onData(chunk: string) {
     this.buffer += chunk;
     const lines = this.buffer.split("\n");
@@ -171,7 +179,10 @@ class JsonRpcLineClient {
     for (const line of lines) {
       if (!line.trim()) continue;
       const response = JSON.parse(line) as JsonRpcResponse;
-      if (typeof response.id !== "number") continue;
+      if (typeof response.id !== "number") {
+        this.unexpectedResponses.push(response);
+        continue;
+      }
       const pending = this.pending.get(response.id);
       if (!pending) continue;
       this.pending.delete(response.id);
