@@ -3,6 +3,8 @@ import { exit, stderr, stdout } from "node:process";
 import { buildEvalReport, formatEvalReportMarkdown } from "../src/lib/eval";
 import { patchMetadataFromDiff, validateLiveFinding } from "../src/lib/live-schemas";
 import { calcEvalScore, judgeFindings } from "../src/lib/judge";
+import { calcLiveTargetStats, SCOUT_TARGET_REPO_URL } from "../src/lib/live-target";
+import { parseFindingLine } from "../src/lib/prompts";
 import { DEMO_REPO_URL, scoutFix, scoutReview } from "../src/lib/scout-runner";
 import {
   SEEDED_BENCHMARK_MANIFEST,
@@ -22,6 +24,7 @@ async function main() {
   await testSeededEvalTournamentAndTrace();
   await testExtraFindingsStayOutOfSeededRecall();
   testLiveSchemas();
+  testStructuredFindingParserAndLiveTargetStats();
   testGeneratedArtifactHygiene();
 
   stdout.write(JSON.stringify({
@@ -31,10 +34,42 @@ async function main() {
       "seeded-eval-tournament-trace",
       "extra-finding-accounting",
       "live-schema-validation",
+      "structured-live-target-stats",
       "generated-artifact-hygiene",
     ],
   }, null, 2));
   stdout.write("\n");
+}
+
+function testStructuredFindingParserAndLiveTargetStats() {
+  const parsed = parseFindingLine([
+    "FINDING_JSON|",
+    JSON.stringify({
+      severity: "critical",
+      file: "src/audit.ts",
+      line: 14,
+      title: "Raw email logged despite redaction claim",
+      description: "auditTicketCreated logs customerEmail directly even though the comment promises redaction.",
+      confidence: 98,
+      evidence: "customerEmail: ticket.customerEmail",
+    }),
+  ].join(""));
+
+  assert(Boolean(parsed), "structured finding parser must accept schema-valid JSON line");
+  assert(parsed?.evidence?.includes("customerEmail"), "structured finding parser must preserve evidence");
+
+  const stats = calcLiveTargetStats(SCOUT_TARGET_REPO_URL, [
+    {
+      ...parsed!,
+      id: "target.raw-email",
+      aspect: "spec-drift",
+      verdict: "confirmed",
+    },
+  ]);
+  assert(stats.enabled, "live target stats must activate for the public target repo URL");
+  assert(stats.total === 7, "live target stats must track seven target issues");
+  assert(stats.caught >= 1, "live target stats must count matched planted issues");
+  assert(stats.missed <= 6, "live target stats must count missed planted issues");
 }
 
 async function testJudgeDedupeAndEvalScore() {

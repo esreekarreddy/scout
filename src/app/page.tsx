@@ -33,7 +33,7 @@ export default function Home() {
       />
 
       {fixingFinding && (
-        <FixModal finding={fixingFinding} fixers={fixers} onClose={closeFixers} />
+        <FixModal repo={repo} finding={fixingFinding} fixers={fixers} onClose={closeFixers} />
       )}
     </>
   );

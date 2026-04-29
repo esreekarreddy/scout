@@ -11,6 +11,10 @@ export const liveFindingSchema = z.object({
   evidence: z.string().optional(),
 });
 
+export const liveFindingEnvelopeSchema = z.object({
+  findings: z.array(liveFindingSchema).min(1).max(6),
+});
+
 export const liveJudgeVerdictSchema = z.object({
   findingId: z.string().min(1),
   verdict: z.enum(["confirmed", "likely", "speculative"]),
@@ -38,12 +42,17 @@ export const liveHandoffSchema = z.object({
 });
 
 export type LiveFinding = z.infer<typeof liveFindingSchema>;
+export type LiveFindingEnvelope = z.infer<typeof liveFindingEnvelopeSchema>;
 export type LiveJudgeVerdict = z.infer<typeof liveJudgeVerdictSchema>;
 export type LivePatchMetadata = z.infer<typeof livePatchMetadataSchema>;
 export type LiveHandoff = z.infer<typeof liveHandoffSchema>;
 
 export function validateLiveFinding(value: unknown): LiveFinding {
   return liveFindingSchema.parse(value);
+}
+
+export function validateLiveFindingEnvelope(value: unknown): LiveFindingEnvelope {
+  return liveFindingEnvelopeSchema.parse(value);
 }
 
 export function validateLivePatchMetadata(value: unknown): LivePatchMetadata {

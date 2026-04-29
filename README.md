@@ -61,6 +61,8 @@ OPENAI_MODEL=gpt-5.5
 GITHUB_TOKEN=your_optional_github_token
 ```
 
+The main live demo target is [https://github.com/esreekarreddy/scout-target-repo](https://github.com/esreekarreddy/scout-target-repo). It is intentionally tiny and flawed, with a known answer key for measuring live model findings.
+
 No key is needed for the deterministic seeded review, MCP smoke test, or UI walkthrough.
 
 ## Local Verification
@@ -90,6 +92,7 @@ npm run scout:mcp
 | `/strategy` | internal hackathon pathway rationale and stretch feature plan |
 | `POST /api/review` | streams one specialist review agent; seeded demo returns deterministic streams |
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
+| `POST /api/score-patches` | applies completed patch candidates in a temp workspace when repo files are available, then returns execution-aware tournament scores |
 | `src/lib/github.ts` | fetches a bounded GitHub file tree so live review sees README claims, package files, source, and tests without dumping the whole repo |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
 | `npm run scout:unit` | runs deterministic unit-style checks for judge, eval, tournament, trace, patch execution, and evidence graph behavior |
@@ -108,6 +111,7 @@ npm run scout:mcp
 - **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, adds proof where needed, and survives execution when execution results are supplied.
 - **Evidence graph:** compact graph links repo, findings, files, tests, patches, gates, trace entries, and receipts so model prompts can use focused context instead of whole-repo dumps.
 - **Live schemas:** live finding, judge, patch metadata, and handoff shapes are validated before use in deterministic helpers.
+- **Live target answer key:** the public `scout-target-repo` fixture lets the UI show caught, missed, and confirmed stats for a real GitHub URL.
 - **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, trace receipt, and pass/warn/fail gates.
 
 ## Seeded Benchmark
@@ -192,11 +196,13 @@ src/
     api/
       review/route.ts        review stream endpoint
       fix/route.ts           fix stream endpoint
+      score-patches/route.ts server-side patch apply and score gate
   lib/
     demo-fixtures.ts         seeded benchmark and deterministic patches
     github.ts                bounded GitHub tree ingestion
     health.ts                trust-score calculation
     judge.ts                 dedupe, verdicts, eval score
+    live-target.ts           answer key for the public live demo repo
     evidence-graph.ts        compact graph for focused evidence context
     prompts.ts               review and fix prompts
     patch-executor.ts        temp-workspace patch execution gate

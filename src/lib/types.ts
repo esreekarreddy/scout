@@ -107,6 +107,14 @@ export interface PatchScore {
   checksum: string;
 }
 
+export interface PatchExecutionSummary {
+  candidateId: string;
+  eligible: boolean;
+  applySummary: string;
+  checkSummaries: string[];
+  disqualifiedReason?: string;
+}
+
 export interface TournamentHandoff {
   title: string;
   summary: string;

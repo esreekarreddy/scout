@@ -16,7 +16,7 @@ function latestTranscript(agent: AgentState) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => !line.startsWith("FINDING|"));
+    .filter((line) => !line.startsWith("FINDING|") && !line.startsWith("FINDING_JSON|"));
   return lines.at(-1) ?? (agent.status === "running" ? "Waiting for scout stream..." : "No transcript captured.");
 }
 

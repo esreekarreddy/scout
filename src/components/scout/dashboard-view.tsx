@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { AgentState, Finding } from "@/lib/types";
 import { calcHealth } from "@/lib/health";
 import { calcEvalScore, judgeFindings } from "@/lib/judge";
+import { calcLiveTargetStats } from "@/lib/live-target";
 import { TopBar } from "./top-bar";
 import { HealthGauge } from "./health-gauge";
 import { Stat } from "./stat";
@@ -46,6 +47,7 @@ export function DashboardView({
   const judgedFindings = judgeFindings(allFindings);
   const score = calcHealth(judgedFindings);
   const evalScore = calcEvalScore(allFindings);
+  const liveTargetStats = calcLiveTargetStats(repo, judgedFindings);
   const runningCount = agents.filter((a) => a.status === "running").length;
   const doneCount = agents.filter((a) => a.status === "done").length;
 
@@ -84,12 +86,35 @@ export function DashboardView({
           </div>
 
           <EvalScorecard
-            title="Seeded proof benchmark"
-            subtitle="Demo mode is measured against known AI-code mistakes, so recall and noise stay visible."
+            title={liveTargetStats.enabled ? "Live target answer key" : "Seeded proof benchmark"}
+            subtitle={liveTargetStats.enabled
+              ? "This public target repo has planted mistakes, so live model findings can be measured instead of just admired."
+              : "Demo mode is measured against known AI-code mistakes, so recall and noise stay visible."}
             scores={[
-              { id: "caught", label: "Caught", value: evalScore.caught, max: evalScore.seededMistakes, note: "raw seeded findings surfaced", tone: "green" },
-              { id: "confirmed", label: "Confirmed", value: evalScore.confirmed, max: evalScore.seededMistakes, note: "deduped judge groups with evidence", tone: "blue" },
-              { id: "noise", label: "Speculative", value: evalScore.speculative, max: Math.max(1, judgedFindings.length), note: "kept separate from demo claims", tone: evalScore.speculative > 2 ? "red" : "amber" },
+              {
+                id: "caught",
+                label: "Caught",
+                value: liveTargetStats.enabled ? liveTargetStats.caught : evalScore.caught,
+                max: liveTargetStats.enabled ? liveTargetStats.total : evalScore.seededMistakes,
+                note: liveTargetStats.enabled ? "matched planted target issues" : "raw seeded findings surfaced",
+                tone: "green",
+              },
+              {
+                id: "confirmed",
+                label: "Confirmed",
+                value: liveTargetStats.enabled ? liveTargetStats.confirmed : evalScore.confirmed,
+                max: liveTargetStats.enabled ? Math.max(1, judgedFindings.length) : evalScore.seededMistakes,
+                note: "deduped judge groups with evidence",
+                tone: "blue",
+              },
+              {
+                id: "noise",
+                label: liveTargetStats.enabled ? "Missed" : "Speculative",
+                value: liveTargetStats.enabled ? liveTargetStats.missed : evalScore.speculative,
+                max: liveTargetStats.enabled ? liveTargetStats.total : Math.max(1, judgedFindings.length),
+                note: liveTargetStats.enabled ? "answer-key issues not found yet" : "kept separate from demo claims",
+                tone: (liveTargetStats.enabled ? liveTargetStats.missed : evalScore.speculative) > 2 ? "red" : "amber",
+              },
             ]}
           />
         </div>

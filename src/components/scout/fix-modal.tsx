@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Finding, FixerState } from "@/lib/types";
+import type { Finding, FixerState, PatchExecutionSummary, PatchScore } from "@/lib/types";
 import { buildLocalPatchTournament, PatchTournament } from "./patch-tournament";
 import { TournamentReceipt } from "./tournament-receipt";
 
@@ -13,17 +13,36 @@ import { TournamentReceipt } from "./tournament-receipt";
  * actions only. Everything above the footer is base UI; do not modify.
  */
 export function FixModal({
+  repo,
   finding,
   fixers,
   onClose,
 }: {
+  repo: string;
   finding: Finding;
   fixers: FixerState[];
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
-  const tournament = buildLocalPatchTournament(finding, fixers);
+  const [serverScores, setServerScores] = useState<PatchScore[]>([]);
+  const [executions, setExecutions] = useState<PatchExecutionSummary[]>([]);
+  const [executionMode, setExecutionMode] = useState<string>("local-score");
+  const tournament = serverScores.length > 0
+    ? serverScores.map((score) => ({
+      id: score.candidateId,
+      strategy: score.strategy,
+      label: fixers.find((fixer) => fixer.strategy === score.strategy)?.label ?? score.strategy,
+      status: "done" as const,
+      score: score.score,
+      rank: score.rank,
+      winner: score.winner,
+      touchedFiles: score.touchedFiles,
+      testFiles: score.testFiles,
+      breakdown: score.breakdown,
+      checksum: score.checksum,
+    }))
+    : buildLocalPatchTournament(finding, fixers);
   const winner = tournament.find((score) => score.winner);
   const winnerIndex = winner ? fixers.findIndex((fixer) => fixer.strategy === winner.strategy) : -1;
   const selectedIndex = selected ?? (winnerIndex >= 0 ? winnerIndex : null);
@@ -33,6 +52,39 @@ export function FixModal({
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
+
+  useEffect(() => {
+    const completed = fixers.filter((fixer) => fixer.status === "done" && fixer.patch.trim().length > 0);
+    if (completed.length === 0 || completed.length !== fixers.length) return;
+
+    let cancelled = false;
+    async function scoreServerSide() {
+      try {
+        const res = await fetch("/api/score-patches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repo, finding, fixers }),
+        });
+        if (!res.ok) return;
+        const payload = (await res.json()) as {
+          scores?: PatchScore[];
+          executions?: PatchExecutionSummary[];
+          mode?: string;
+        };
+        if (cancelled) return;
+        setServerScores(payload.scores ?? []);
+        setExecutions(payload.executions ?? []);
+        setExecutionMode(payload.mode ?? "score-only");
+      } catch {
+        if (!cancelled) setExecutionMode("local-score");
+      }
+    }
+    void scoreServerSide();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [repo, finding, fixers]);
 
   function copySelected() {
     if (selectedIndex === null) return;
@@ -181,8 +233,34 @@ export function FixModal({
           </div>
 
           <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
-            <PatchTournament finding={finding} fixers={fixers} />
-            <TournamentReceipt finding={finding} fixers={fixers} />
+            <PatchTournament finding={finding} fixers={fixers} serverScores={serverScores} executionMode={executionMode} />
+            {executions.length > 0 && (
+              <section className="card" style={{ padding: "14px 16px", borderRadius: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
+                  <div>
+                    <p style={{ fontWeight: 800, fontSize: 14 }}>Patch execution gate</p>
+                    <p style={{ color: "var(--ink-2)", fontSize: 12, marginTop: 3 }}>
+                      Scout applied each patch in a temporary workspace before ranking it.
+                    </p>
+                  </div>
+                  <p style={{ fontFamily: "var(--font-mono)", color: "var(--ink-3)", fontSize: 11 }}>{executionMode}</p>
+                </div>
+                <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+                  {executions.map((execution) => (
+                    <div key={execution.candidateId} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 10, background: execution.eligible ? "var(--green-surface)" : "var(--red-surface)" }}>
+                      <p style={{ fontWeight: 800, fontSize: 12, overflowWrap: "anywhere" }}>{execution.candidateId}</p>
+                      <p style={{ color: execution.eligible ? "var(--green)" : "var(--red)", fontSize: 12, marginTop: 3 }}>
+                        {execution.eligible ? "eligible" : `disqualified: ${execution.disqualifiedReason ?? "unknown"}`}
+                      </p>
+                      <p style={{ color: "var(--ink-2)", fontSize: 11, marginTop: 5, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap" }}>
+                        {execution.applySummary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            <TournamentReceipt finding={finding} fixers={fixers} serverScores={serverScores} />
           </div>
         </div>
 

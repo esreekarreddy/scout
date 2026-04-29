@@ -1,5 +1,5 @@
 import { scorePatchTournament } from "@/lib/tournament";
-import type { Finding, FixerState, FixStrategy, PatchScoreBreakdown } from "@/lib/types";
+import type { Finding, FixerState, FixStrategy, PatchScore, PatchScoreBreakdown } from "@/lib/types";
 
 interface LocalPatchScore {
   id: string;
@@ -61,11 +61,32 @@ export function buildLocalPatchTournament(finding: Finding, fixers: FixerState[]
 export function PatchTournament({
   finding,
   fixers,
+  serverScores,
+  executionMode,
 }: {
   finding: Finding;
   fixers: FixerState[];
+  serverScores?: PatchScore[];
+  executionMode?: string;
 }) {
-  const scores = buildLocalPatchTournament(finding, fixers);
+  const scores = serverScores?.length
+    ? serverScores.map((score) => {
+      const fixer = fixers.find((candidate) => candidate.strategy === score.strategy);
+      return {
+        id: score.candidateId,
+        strategy: score.strategy,
+        label: fixer?.label ?? score.strategy,
+        status: fixer?.status ?? "done",
+        score: score.score,
+        rank: score.rank,
+        winner: score.winner,
+        touchedFiles: score.touchedFiles,
+        testFiles: score.testFiles,
+        breakdown: score.breakdown,
+        checksum: score.checksum,
+      };
+    })
+    : buildLocalPatchTournament(finding, fixers);
   const winner = scores.find((score) => score.winner);
 
   return (
@@ -87,11 +108,11 @@ export function PatchTournament({
                   textTransform: "uppercase",
                 }}
               >
-                deterministic scorer
+                {executionMode === "apply-gated" ? "apply gated" : "deterministic scorer"}
               </span>
             </div>
             <p style={{ color: "var(--ink-2)", fontSize: 12, marginTop: 3 }}>
-              Three repair agents compete. The model writes patches, then fixed criteria rank target fit, risk removal, proof, scope, and regression risk.
+              Three repair agents compete. The model writes patches, then Scout ranks target fit, risk removal, proof, scope, and patch apply eligibility.
             </p>
           </div>
           <p style={{ color: winner ? "var(--green)" : "var(--ink-3)", fontWeight: 900, fontSize: 12, textAlign: "right", minWidth: 150 }}>

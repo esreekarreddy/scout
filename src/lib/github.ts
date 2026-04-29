@@ -1,4 +1,5 @@
 import { DEMO_REPO_CONTEXT, isDemoRepo } from "./demo-fixtures";
+import type { RepoFileInput } from "./patch-executor";
 
 const BASE = "https://api.github.com";
 
@@ -102,11 +103,55 @@ export async function fetchRepoContext(repoUrl: string): Promise<string> {
   return sections.join("\n\n---\n\n") || "// Empty repo or no readable source files found.";
 }
 
+export async function fetchRepoFiles(repoUrl: string): Promise<RepoFileInput[]> {
+  if (isDemoRepo(repoUrl)) return contextToRepoFiles(DEMO_REPO_CONTEXT);
+
+  const parsed = parseGitHubUrl(repoUrl);
+  if (!parsed) return [];
+
+  const { owner, repo } = parsed;
+  const headers = ghHeaders();
+  const tree = await fetchInspectableTree(owner, repo, headers);
+  if (!tree) return [];
+
+  const files: RepoFileInput[] = [];
+  for (const entry of tree.files) {
+    const content = await fetchFileText(owner, repo, entry.path, headers);
+    if (content) files.push({ path: entry.path, content });
+  }
+  return files;
+}
+
 async function fetchBoundedTreeContext(
   owner: string,
   repo: string,
   headers: Record<string, string>,
 ): Promise<string | null> {
+  const tree = await fetchInspectableTree(owner, repo, headers);
+  if (!tree) return null;
+
+  const sections: string[] = [];
+  let usedChars = tree.truncated ? "// GitHub tree was truncated, using highest-priority files only.\n\n" : "";
+
+  for (const file of tree.files) {
+    if (usedChars.length >= MAX_TOTAL_CHARS) break;
+    const txt = await fetchFileText(owner, repo, file.path, headers);
+    if (!txt) continue;
+    const slice = txt.slice(0, MAX_FILE_CHARS);
+    const section = `// ${file.path}\n${slice}${txt.length > MAX_FILE_CHARS ? "\n// truncated" : ""}`;
+    if (usedChars.length + section.length > MAX_TOTAL_CHARS) break;
+    sections.push(section);
+    usedChars += section;
+  }
+
+  return sections.length ? `${repoHeader(owner, repo)}\n\n${sections.join("\n\n---\n\n")}` : null;
+}
+
+async function fetchInspectableTree(
+  owner: string,
+  repo: string,
+  headers: Record<string, string>,
+): Promise<{ files: GHTreeEntry[]; truncated: boolean } | null> {
   const metaRes = await fetch(`${BASE}/repos/${owner}/${repo}`, {
     headers,
     next: { revalidate: 300 },
@@ -127,21 +172,7 @@ async function fetchBoundedTreeContext(
     .sort((a, b) => scorePath(b.path) - scorePath(a.path))
     .slice(0, MAX_FILES);
 
-  const sections: string[] = [];
-  let usedChars = data.truncated ? "// GitHub tree was truncated, using highest-priority files only.\n\n" : "";
-
-  for (const file of files) {
-    if (usedChars.length >= MAX_TOTAL_CHARS) break;
-    const txt = await fetchFileText(owner, repo, file.path, headers);
-    if (!txt) continue;
-    const slice = txt.slice(0, MAX_FILE_CHARS);
-    const section = `// ${file.path}\n${slice}${txt.length > MAX_FILE_CHARS ? "\n// truncated" : ""}`;
-    if (usedChars.length + section.length > MAX_TOTAL_CHARS) break;
-    sections.push(section);
-    usedChars += section;
-  }
-
-  return sections.length ? `${repoHeader(owner, repo)}\n\n${sections.join("\n\n---\n\n")}` : null;
+  return { files, truncated: data.truncated ?? false };
 }
 
 function repoHeader(owner: string, repo: string) {
@@ -185,4 +216,16 @@ async function fetchFileText(
   const data: { content?: string } = await res.json();
   if (!data.content) return null;
   return Buffer.from(data.content, "base64").toString("utf-8");
+}
+
+function contextToRepoFiles(context: string): RepoFileInput[] {
+  const files: RepoFileInput[] = [];
+  for (const section of context.split(/\n---\n/g)) {
+    const lines = section.trim().split("\n");
+    const header = lines.shift();
+    const match = /^\/\/\s+(.+)$/.exec(header ?? "");
+    if (!match) continue;
+    files.push({ path: match[1], content: `${lines.join("\n")}\n` });
+  }
+  return files;
 }

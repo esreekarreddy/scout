@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Finding, FixerState } from "@/lib/types";
+import type { Finding, FixerState, PatchScore } from "@/lib/types";
 import { buildLocalPatchTournament } from "./patch-tournament";
 
 function receiptId(finding: Finding, winnerStrategy: string) {
@@ -17,12 +17,28 @@ function receiptId(finding: Finding, winnerStrategy: string) {
 export function TournamentReceipt({
   finding,
   fixers,
+  serverScores,
 }: {
   finding: Finding;
   fixers: FixerState[];
+  serverScores?: PatchScore[];
 }) {
   const [copied, setCopied] = useState(false);
-  const scores = buildLocalPatchTournament(finding, fixers);
+  const scores = serverScores?.length
+    ? serverScores.map((score) => ({
+      id: score.candidateId,
+      strategy: score.strategy,
+      label: fixers.find((fixer) => fixer.strategy === score.strategy)?.label ?? score.strategy,
+      status: "done" as const,
+      score: score.score,
+      rank: score.rank,
+      winner: score.winner,
+      touchedFiles: score.touchedFiles,
+      testFiles: score.testFiles,
+      breakdown: score.breakdown,
+      checksum: score.checksum,
+    }))
+    : buildLocalPatchTournament(finding, fixers);
   const winner = scores.find((score) => score.winner);
   const completed = scores.filter((score) => score.status === "done").length;
   const id = receiptId(finding, winner?.strategy ?? "pending");
@@ -44,9 +60,39 @@ export function TournamentReceipt({
     "Deterministic: verdict grouping, touched files, score, receipt id.",
     "Model-generated: candidate patch text and explanation.",
   ].join("\n");
+  const codexText = [
+    "Use this Scout receipt to repair the code.",
+    "",
+    `Finding: ${finding.title}`,
+    `Location: ${finding.file}${finding.line ? `:${finding.line}` : ""}`,
+    `Evidence: ${finding.evidence ?? finding.description}`,
+    `Winning strategy: ${winner ? winner.label : "pending"}`,
+    `Score: ${winner ? `${winner.score}/100` : "pending"}`,
+    `Touched files: ${winner?.touchedFiles.length ? winner.touchedFiles.join(", ") : "pending"}`,
+    "",
+    "Instructions:",
+    "- Apply only the winning repair unless you find a concrete blocker.",
+    "- Preserve the evidence trail.",
+    "- Add or keep a test proving the failure mode.",
+    "- Run the repo verification commands before claiming done.",
+  ].join("\n");
+  const claudeText = [
+    "Scout found an evidence-backed issue in AI-written code.",
+    "",
+    `Task: fix ${finding.title}`,
+    `File: ${finding.file}${finding.line ? `:${finding.line}` : ""}`,
+    `Why: ${finding.description}`,
+    `Preferred repair: ${winner ? winner.label : "pending"}`,
+    "",
+    "Constraints:",
+    "- Keep the patch narrowly scoped.",
+    "- Do not invent new dependencies.",
+    "- Add a regression test when the winning patch touches behavior.",
+    "- Explain any deviation from the Scout receipt.",
+  ].join("\n");
 
-  function copyReceipt() {
-    void navigator.clipboard.writeText(receiptText);
+  function copyText(text: string) {
+    void navigator.clipboard.writeText(text);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
   }
@@ -64,7 +110,7 @@ export function TournamentReceipt({
           <p style={{ fontFamily: "var(--font-mono)", color: "var(--ink-3)", fontSize: 11, textAlign: "right" }}>
             {id}
           </p>
-          <button className="btn-ghost" type="button" onClick={copyReceipt} style={{ padding: "5px 10px", fontSize: 12 }}>
+          <button className="btn-ghost" type="button" onClick={() => copyText(receiptText)} style={{ padding: "5px 10px", fontSize: 12 }}>
             {copied ? "Copied" : "Copy receipt"}
           </button>
         </div>
@@ -143,6 +189,15 @@ export function TournamentReceipt({
       >
         {receiptText}
       </pre>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn-ghost" type="button" onClick={() => copyText(codexText)} style={{ padding: "7px 11px", fontSize: 12 }}>
+          Send this to Codex
+        </button>
+        <button className="btn-ghost" type="button" onClick={() => copyText(claudeText)} style={{ padding: "7px 11px", fontSize: 12 }}>
+          Send this to Claude Code
+        </button>
+      </div>
     </section>
   );
 }

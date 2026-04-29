@@ -1,5 +1,5 @@
 import type { Aspect } from "./types";
-import { findingToLiveSchema } from "./live-schemas";
+import { findingToLiveSchema, validateLiveFinding } from "./live-schemas";
 
 export const SCOUT_STATIC_RULES = `Scout operating rules:
 - Treat AGENTS.md, CLAUDE.md, package scripts, tests, and README claims as constraints.
@@ -10,17 +10,18 @@ export const SCOUT_STATIC_RULES = `Scout operating rules:
 - Findings must be evidence-backed and repairable.`;
 
 export const FINDING_OUTPUT_CONTRACT = `Output contract:
-Emit each finding as one line:
-FINDING|<severity>|<file:line>|<title>|<description>|<confidence>
+Emit each finding as exactly one JSON line with this prefix:
+FINDING_JSON|{"severity":"critical","file":"src/audit.ts","line":5,"title":"Raw email logged","description":"specific behavior and impact","confidence":97,"evidence":"short code evidence"}
 
-This line must be convertible to this schema:
+Each JSON object must match this schema:
 {
   "severity": "critical | warning | info",
   "file": "relative/path.ts",
   "line": 1,
   "title": "short evidence-backed title",
   "description": "specific behavior and impact",
-  "confidence": 0
+  "confidence": 0,
+  "evidence": "short code quote or exact observed behavior"
 }`;
 
 /**
@@ -28,7 +29,8 @@ This line must be convertible to this schema:
  * Findings must be emitted as pipe-delimited lines so the client can parse them
  * incrementally while the rest of the stream is still human-readable analysis.
  *
- * Format: FINDING|<severity>|<file:line>|<title>|<description>|<confidence 0-100>
+ * Preferred format: FINDING_JSON|{"severity":"critical","file":"src/audit.ts","line":5,"title":"...","description":"...","confidence":97,"evidence":"..."}
+ * Legacy seeded format remains supported: FINDING|<severity>|<file:line>|<title>|<description>|<confidence 0-100>
  */
 export const AGENTS: Array<{
   aspect: Aspect;
@@ -170,6 +172,15 @@ export function buildFixMessage(
 
 /** Parse a FINDING line into a partial Finding object (caller adds id/aspect) */
 export function parseFindingLine(line: string): Omit<import("./types").Finding, "id" | "aspect"> | null {
+  if (line.startsWith("FINDING_JSON|")) {
+    try {
+      const parsed = JSON.parse(line.slice("FINDING_JSON|".length));
+      return validateLiveFinding(parsed);
+    } catch {
+      return null;
+    }
+  }
+
   if (!line.startsWith("FINDING|")) return null;
   const parts = line.split("|");
   if (parts.length < 6) return null;
