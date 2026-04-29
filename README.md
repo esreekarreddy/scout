@@ -57,7 +57,7 @@ For live repos, set these in `.env.local`:
 
 ```bash
 OPENAI_API_KEY=your_openai_key
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5.4-mini
 GITHUB_TOKEN=your_optional_github_token
 ```
 
@@ -67,6 +67,7 @@ No key is needed for the deterministic seeded review, MCP smoke test, or UI walk
 
 ```bash
 npm run scout:smoke
+npm run scout:unit
 npm run scout:eval -- --assert
 npm run scout:qa
 npx tsc --noEmit --pretty false
@@ -90,8 +91,9 @@ npm run scout:mcp
 | `POST /api/review` | streams one specialist review agent; seeded demo returns deterministic streams |
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
-| `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, trace receipt, and checksums |
-| `npm run scout:qa` | checks eval JSON shape, local tool calls, seeded gates, trace stages, and hygiene rules |
+| `npm run scout:unit` | runs deterministic unit-style checks for judge, eval, tournament, trace, patch execution, and evidence graph behavior |
+| `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, execution summaries, trace receipt, and checksums |
+| `npm run scout:qa` | runs unit checks, eval JSON shape, local tool calls, seeded gates, trace stages, and hygiene rules |
 | `npm run scout:mcp` | starts the local stdio JSON-RPC tool surface for `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, and `scout_eval` |
 
 ## Specialist Agents
@@ -101,7 +103,10 @@ npm run scout:mcp
 - **Test Theater Scout:** tests that pass without proving the contract.
 - **Judge layer:** deterministic dedupe/ranking pass that marks findings as `confirmed`, `likely`, or `speculative`.
 - **Repair agents:** conservative, idiomatic, and robust patch strategies compete against the same finding.
-- **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, and adds proof where needed.
+- **Patch executor:** optional temp-workspace execution applies patch candidates and disqualifies failed apply or failed check runs.
+- **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, adds proof where needed, and survives execution when execution results are supplied.
+- **Evidence graph:** compact graph links repo, findings, files, tests, patches, gates, trace entries, and receipts so model prompts can use focused context instead of whole-repo dumps.
+- **Live schemas:** live finding, judge, patch metadata, and handoff shapes are validated before use in deterministic helpers.
 - **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, trace receipt, and pass/warn/fail gates.
 
 ## Seeded Benchmark
@@ -124,11 +129,11 @@ The UI reports caught/confirmed/speculative counts so the demo is an eval, not j
 | --- | --- |
 | Real domain problem | Agentic software engineering: AI-written code can look correct while hiding fake dependencies, spec drift, weak tests, and security gaps. |
 | Domain credibility | The hackathon workflow is the domain. Scout checks the kind of code Codex-style agents write under time pressure. |
-| Tools, not chat | The tool surface exposes `scout_review`, `scout_fix`, `scout_score_patch`, and `scout_handoff`. |
-| Real artifact | Each run produces an Evidence Pack, ranked findings, competing diffs, a Tournament Receipt, and a Codex handoff. |
-| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, patch gates, trace checksums, and QA gates separate evidence from speculation. |
+| Tools, not chat | The tool surface exposes `scout_review`, `scout_fix`, `scout_score_patch`, `scout_handoff`, and `scout_eval`. |
+| Real artifact | Each run produces an Evidence Pack, Evidence Graph, ranked findings, competing diffs, execution-aware patch diagnostics, a Tournament Receipt, and a Codex handoff. |
+| Anti-hallucination discipline | Seeded known-answer benchmark, proof labels, deterministic judge fallback, patch execution gates, trace checksums, graph context, unit tests, and QA gates separate evidence from speculation. |
 | Crisp demo moment | The privacy finding proves a contradiction: code logs raw email while the comment says the email is redacted. Robust wins because it fixes code and adds a privacy test. |
-| Deterministic vs model boundary | Seeded benchmark, fixture patches, patch scoring, trace receipts, QA checks, and MCP smoke tests are deterministic. Live repo review and live fix generation use the OpenAI API. |
+| Deterministic vs model boundary | Seeded benchmark, fixture patches, patch scoring, trace receipts, graph construction, QA checks, and local tool smoke tests are deterministic. Live repo review and live fix generation use the OpenAI API. |
 
 ## Demo Artifact
 
@@ -163,6 +168,11 @@ Trace:
 - deterministic fixture steps are labelled as model: none
 - receipt id links the eval report to the handoff
 
+Execution and graph:
+- patch candidates can be applied in a temp workspace when repo files and checks are supplied
+- failed apply or failed commands cannot win
+- evidence graph keeps focused repo, finding, file, test, patch, gate, trace, and receipt context
+
 After:
 - winning diff removes raw email logging
 - test asserts the raw email is absent
@@ -186,7 +196,9 @@ src/
     github.ts                GitHub Contents API helpers
     health.ts                trust-score calculation
     judge.ts                 dedupe, verdicts, eval score
+    evidence-graph.ts        compact graph for focused evidence context
     prompts.ts               review and fix prompts
+    patch-executor.ts        temp-workspace patch execution gate
     scout-runner.ts          shared local runner for Scout tools
     scout-stream.ts          client stream helpers
     tournament.ts            proof ledger, patch scoring, receipt helpers
@@ -197,6 +209,9 @@ src/
   tools/
     scout-eval.ts            deterministic eval CLI
 scripts/
+  unit-core.ts               judge, eval, tournament, trace unit-style checks
+  unit-patch-executor.ts     executable patch gate checks
+  unit-evidence-graph.ts     graph construction and context checks
   qa-eval-json-shape.ts      eval report and trace shape gate
   qa-mcp-tools.ts            local JSON-RPC tool smoke gate
   qa-hygiene.ts              dash, secret, and wifi-detail hygiene gate
