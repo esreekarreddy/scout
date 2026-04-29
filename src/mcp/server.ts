@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { stdin, stdout, stderr, argv, exit } from "node:process";
+import { buildEvalReport } from "../lib/eval";
 import { scoutFix, scoutHandoff, scoutReview, scoutScorePatch, DEMO_REPO_URL } from "../lib/scout-runner";
 import { scorePatchTournament } from "../lib/tournament";
 import type { Finding, FixStrategy, PatchCandidate } from "../lib/types";
@@ -61,6 +62,15 @@ const TOOLS = [
       required: ["repo", "finding"],
     },
   },
+  {
+    name: "scout_eval",
+    description: "Run Scout's deterministic seeded eval suite and return production-readiness gates.",
+    inputSchema: {
+      type: "object",
+      properties: { repo: { type: "string" } },
+      required: ["repo"],
+    },
+  },
 ];
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -102,6 +112,20 @@ async function callScoutTool(name: string, params: Record<string, unknown>) {
   if (name === "scout_fix") return scoutFix(repo, asFinding(params.finding), asStrategy(params.strategy));
   if (name === "scout_score_patch") return scoutScorePatch(repo, asFinding(params.finding), asCandidate(params.candidate));
   if (name === "scout_handoff") return scoutHandoff(repo, asFinding(params.finding));
+  if (name === "scout_eval") {
+    if (repo !== DEMO_REPO_URL) {
+      throw new Error("scout_eval currently supports demo://ai-written-code-seed only");
+    }
+    const review = await scoutReview(repo);
+    const patchCandidates = (await Promise.all(review.judgedFindings.map((finding) => scoutFix(repo, finding))))
+      .flatMap((fix) => fix.candidates);
+    return buildEvalReport({
+      repo,
+      findings: review.findings,
+      patchCandidates,
+      manifest: review.manifest,
+    });
+  }
   throw new Error(`Unknown tool: ${name}`);
 }
 

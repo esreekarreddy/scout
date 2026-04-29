@@ -5,8 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "scout:eval": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-tools --noEmit false src/tools/scout-eval.ts && node .next/scout-tools/tools/scout-eval.js",
+    "scout:eval:json": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-tools --noEmit false src/tools/scout-eval.ts && node .next/scout-tools/tools/scout-eval.js --format json",
+    "scout:eval:report": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-tools --noEmit false src/tools/scout-eval.ts && node .next/scout-tools/tools/scout-eval.js --format markdown --out .next/scout-eval-report.md",
     "scout:mcp": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-mcp --noEmit false src/mcp/server.ts && node .next/scout-mcp/mcp/server.js",
     "scout:smoke": "tsc --module commonjs --moduleResolution node --target ES2022 --outDir .next/scout-mcp --noEmit false src/mcp/server.ts && node .next/scout-mcp/mcp/server.js --smoke",
+    "test:eval": "npm run scout:eval -- --assert",
     "start": "next start",
     "lint": "eslint"
   },

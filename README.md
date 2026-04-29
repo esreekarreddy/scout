@@ -65,6 +65,7 @@ No key is needed for the deterministic seeded review, MCP smoke test, or UI walk
 
 ```bash
 npm run scout:smoke
+npm run scout:eval -- --assert
 npx tsc --noEmit --pretty false
 npm run lint
 npm run build
@@ -86,6 +87,7 @@ npm run scout:mcp
 | `POST /api/review` | streams one specialist review agent; seeded demo returns deterministic streams |
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
+| `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, and checksums |
 | `npm run scout:mcp` | starts the local stdio JSON-RPC tool surface for `scout_review`, `scout_fix`, `scout_score_patch`, and `scout_handoff` |
 
 ## Specialist Agents
@@ -96,6 +98,7 @@ npm run scout:mcp
 - **Judge layer:** deterministic dedupe/ranking pass that marks findings as `confirmed`, `likely`, or `speculative`.
 - **Repair agents:** conservative, idiomatic, and robust patch strategies compete against the same finding.
 - **Patch scorer:** deterministic gates check whether the patch addresses the evidence, avoids new hallucinated APIs, and adds proof where needed.
+- **Eval harness:** reproducible seeded eval report with recall, precision, F1, critical recall, patch diagnostics, and pass/warn/fail gates.
 
 ## Seeded Benchmark
 
