@@ -57,7 +57,7 @@ For live repos, set these in `.env.local`:
 
 ```bash
 OPENAI_API_KEY=your_openai_key
-OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MODEL=gpt-5.5
 GITHUB_TOKEN=your_optional_github_token
 ```
 
@@ -90,6 +90,7 @@ npm run scout:mcp
 | `/strategy` | internal hackathon pathway rationale and stretch feature plan |
 | `POST /api/review` | streams one specialist review agent; seeded demo returns deterministic streams |
 | `POST /api/fix` | streams one fixer agent; seeded demo returns deterministic PR-shaped patches |
+| `src/lib/github.ts` | fetches a bounded GitHub file tree so live review sees README claims, package files, source, and tests without dumping the whole repo |
 | `npm run scout:smoke` | runs the local Scout tool surface against the seeded benchmark |
 | `npm run scout:unit` | runs deterministic unit-style checks for judge, eval, tournament, trace, patch execution, and evidence graph behavior |
 | `npm run scout:eval` | produces seeded recall, precision, F1, critical recall, gates, patch diagnostics, execution summaries, trace receipt, and checksums |
@@ -193,7 +194,7 @@ src/
       fix/route.ts           fix stream endpoint
   lib/
     demo-fixtures.ts         seeded benchmark and deterministic patches
-    github.ts                GitHub Contents API helpers
+    github.ts                bounded GitHub tree ingestion
     health.ts                trust-score calculation
     judge.ts                 dedupe, verdicts, eval score
     evidence-graph.ts        compact graph for focused evidence context

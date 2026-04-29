@@ -23,6 +23,15 @@ export function parseGitHubUrl(
 }
 
 type GHEntry = { name: string; path: string; type: "file" | "dir"; size: number };
+type GHTreeEntry = {
+  path: string;
+  type: "blob" | "tree" | "commit";
+  size?: number;
+};
+
+const MAX_FILES = 18;
+const MAX_FILE_CHARS = 2600;
+const MAX_TOTAL_CHARS = 42000;
 
 /** Fetch a small representative sample of the repo as a single string. */
 export async function fetchRepoContext(repoUrl: string): Promise<string> {
@@ -33,6 +42,9 @@ export async function fetchRepoContext(repoUrl: string): Promise<string> {
 
   const { owner, repo } = parsed;
   const headers = ghHeaders();
+
+  const treeContext = await fetchBoundedTreeContext(owner, repo, headers);
+  if (treeContext) return treeContext;
 
   // 1. Root contents
   const rootRes = await fetch(`${BASE}/repos/${owner}/${repo}/contents`, {
@@ -88,6 +100,75 @@ export async function fetchRepoContext(repoUrl: string): Promise<string> {
 
   sections.push(...fileTexts.filter(Boolean) as string[]);
   return sections.join("\n\n---\n\n") || "// Empty repo or no readable source files found.";
+}
+
+async function fetchBoundedTreeContext(
+  owner: string,
+  repo: string,
+  headers: Record<string, string>,
+): Promise<string | null> {
+  const metaRes = await fetch(`${BASE}/repos/${owner}/${repo}`, {
+    headers,
+    next: { revalidate: 300 },
+  });
+  if (!metaRes.ok) return null;
+
+  const meta: { default_branch?: string } = await metaRes.json();
+  const branch = meta.default_branch ?? "main";
+  const treeRes = await fetch(
+    `${BASE}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    { headers, next: { revalidate: 300 } },
+  );
+  if (!treeRes.ok) return null;
+
+  const data: { tree?: GHTreeEntry[]; truncated?: boolean } = await treeRes.json();
+  const files = (data.tree ?? [])
+    .filter((entry) => entry.type === "blob" && shouldInspectPath(entry.path, entry.size ?? 0))
+    .sort((a, b) => scorePath(b.path) - scorePath(a.path))
+    .slice(0, MAX_FILES);
+
+  const sections: string[] = [];
+  let usedChars = data.truncated ? "// GitHub tree was truncated, using highest-priority files only.\n\n" : "";
+
+  for (const file of files) {
+    if (usedChars.length >= MAX_TOTAL_CHARS) break;
+    const txt = await fetchFileText(owner, repo, file.path, headers);
+    if (!txt) continue;
+    const slice = txt.slice(0, MAX_FILE_CHARS);
+    const section = `// ${file.path}\n${slice}${txt.length > MAX_FILE_CHARS ? "\n// truncated" : ""}`;
+    if (usedChars.length + section.length > MAX_TOTAL_CHARS) break;
+    sections.push(section);
+    usedChars += section;
+  }
+
+  return sections.length ? `${repoHeader(owner, repo)}\n\n${sections.join("\n\n---\n\n")}` : null;
+}
+
+function repoHeader(owner: string, repo: string) {
+  return `// Repo: ${owner}/${repo}\n// Context mode: bounded GitHub tree\n// File cap: ${MAX_FILES}`;
+}
+
+function shouldInspectPath(path: string, size: number) {
+  if (size > 12000) return false;
+  if (/(^|\/)(node_modules|dist|build|coverage|\.next|\.git)\//.test(path)) return false;
+  if (/(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(path)) return false;
+  return /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|rb|json|md|toml|yaml|yml)$/.test(path);
+}
+
+function scorePath(path: string) {
+  let score = 0;
+  const lower = path.toLowerCase();
+
+  if (/^(readme|agents|claude|package|tsconfig|pyproject|go\.mod|cargo)\./.test(lower)) score += 80;
+  if (lower.includes("test") || lower.includes("spec")) score += 70;
+  if (/^(src|app|lib|server|api)\//.test(lower)) score += 65;
+  if (lower.includes("auth") || lower.includes("audit") || lower.includes("security")) score += 40;
+  if (lower.includes("rate") || lower.includes("limit") || lower.includes("privacy")) score += 35;
+  if (lower.endsWith(".md")) score += 20;
+  if (lower.endsWith(".json")) score += 10;
+  if (path.split("/").length > 4) score -= 20;
+
+  return score;
 }
 
 async function fetchFileText(
