@@ -13,6 +13,8 @@ import { EvalScorecard } from "./eval-scorecard";
 import { JudgePanel } from "./judge-panel";
 import { PipelineTimeline } from "./pipeline-timeline";
 import { EvidencePack } from "./evidence-pack";
+import { EvidenceMap } from "./evidence-map";
+import { TraceReceipt } from "./trace-receipt";
 
 /**
  * The post-launch view: top bar, health summary, 3 agent columns,
@@ -127,6 +129,19 @@ export function DashboardView({
             },
           ]}
         />
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(430px, 100%), 1fr))",
+            gap: 16,
+            alignItems: "start",
+            marginBottom: 24,
+          }}
+        >
+          <EvidenceMap repo={repo} findings={judgedFindings} agents={agents} />
+          <TraceReceipt repo={repo} findings={judgedFindings} agents={agents} allDone={allDone} />
+        </div>
 
         <EvidencePack repo={repo} findings={judgedFindings} agents={agents} />
 
