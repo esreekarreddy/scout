@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
-    model: openai(process.env.OPENAI_MODEL ?? "gpt-4o-mini"),
+    model: openai(process.env.OPENAI_MODEL ?? "gpt-5.4-mini"),
     system: agent.system,
     messages: [{ role: "user", content: buildReviewMessage(repoContext) }],
   });

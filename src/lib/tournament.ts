@@ -12,6 +12,7 @@ import type {
   TournamentHandoff,
   TournamentReceipt,
 } from "./types";
+import type { PatchExecutionResult } from "./patch-executor";
 
 const SEEDED_MISTAKES: SeededMistake[] = [
   {
@@ -189,16 +190,35 @@ export function scorePatchCandidate(candidate: PatchCandidate, finding?: Finding
   };
 }
 
-export function scorePatchTournament(candidates: PatchCandidate[], findings: Finding[] = []): PatchScore[] {
+export function scorePatchTournament(
+  candidates: PatchCandidate[],
+  findings: Finding[] = [],
+  executions?: Record<string, PatchExecutionResult>,
+): PatchScore[] {
   const findingsById = new Map(findings.map((finding) => [finding.id, finding]));
   return candidates
-    .map((candidate) => scorePatchCandidate(candidate, findingsById.get(candidate.findingId)))
+    .map((candidate) => {
+      const score = scorePatchCandidate(candidate, findingsById.get(candidate.findingId));
+      const execution = executions?.[candidate.id];
+      const eligible = executions ? execution?.eligible === true : true;
+      return {
+        ...score,
+        score: eligible ? score.score : 0,
+        checksum: proofHash({
+          ...score,
+          score: eligible ? score.score : 0,
+          executionEligible: eligible,
+          executionReason: executions && !eligible ? execution?.disqualifiedReason ?? "missing-execution" : undefined,
+          checksum: undefined,
+        }),
+      };
+    })
     .sort((a, b) => b.score - a.score || a.candidateId.localeCompare(b.candidateId))
     .map((score, index) => ({
       ...score,
       rank: index + 1,
-      winner: index === 0,
-      checksum: proofHash({ ...score, rank: index + 1, winner: index === 0, checksum: undefined }),
+      winner: index === 0 && score.score > 0,
+      checksum: proofHash({ ...score, rank: index + 1, winner: index === 0 && score.score > 0, checksum: undefined }),
     }));
 }
 
@@ -206,12 +226,13 @@ export function buildTournamentReceipt(input: {
   repo?: string;
   findings: Finding[];
   patchCandidates?: PatchCandidate[];
+  patchExecutions?: Record<string, PatchExecutionResult>;
   manifest?: BenchmarkManifest;
 }): TournamentReceipt {
   const repo = input.repo ?? input.manifest?.repo ?? SEEDED_BENCHMARK_MANIFEST.repo;
   const manifest = input.manifest ?? SEEDED_BENCHMARK_MANIFEST;
   const ledger = buildProofLedger(input.findings, manifest);
-  const patchScores = scorePatchTournament(input.patchCandidates ?? [], input.findings);
+  const patchScores = scorePatchTournament(input.patchCandidates ?? [], input.findings, input.patchExecutions);
   const winningPatch = patchScores.find((score) => score.winner);
   const unsigned = {
     repo,

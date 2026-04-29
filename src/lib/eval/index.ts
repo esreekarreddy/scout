@@ -9,6 +9,7 @@ import {
 } from "../tournament";
 import { buildEvalTrace } from "../trace";
 import type { EvalTrace } from "../trace";
+import type { PatchExecutionResult } from "../patch-executor";
 import type {
   Aspect,
   BenchmarkManifest,
@@ -78,7 +79,22 @@ export interface PatchTournamentDiagnostic {
   riskFlags: string[];
   strengths: string[];
   weaknesses: string[];
+  execution?: PatchTournamentExecutionDiagnostic;
   checksum: string;
+}
+
+export interface PatchTournamentExecutionDiagnostic {
+  eligible: boolean;
+  disqualifiedReason?: string;
+  apply: CompactCommandSummary;
+  checks: CompactCommandSummary[];
+}
+
+export interface CompactCommandSummary {
+  command: string;
+  exitCode: number | null;
+  durationMs: number;
+  summary: string;
 }
 
 export interface EvalReport {
@@ -111,6 +127,7 @@ export function buildEvalReport(input: {
   repo?: string;
   findings: Finding[];
   patchCandidates?: PatchCandidate[];
+  patchExecutions?: Record<string, PatchExecutionResult>;
   manifest?: BenchmarkManifest;
   thresholds?: Partial<EvalThresholds>;
   generatedAt?: string;
@@ -120,12 +137,13 @@ export function buildEvalReport(input: {
   const generatedAt = input.generatedAt ?? new Date(0).toISOString();
   const thresholds = { ...DEFAULT_EVAL_THRESHOLDS, ...input.thresholds };
   const ledger = buildProofLedger(input.findings, manifest);
-  const patchScores = scorePatchTournament(input.patchCandidates ?? [], input.findings);
+  const patchScores = scorePatchTournament(input.patchCandidates ?? [], input.findings, input.patchExecutions);
   const candidatesById = new Map((input.patchCandidates ?? []).map((candidate) => [candidate.id, candidate]));
   const receipt = buildTournamentReceipt({
     repo,
     findings: input.findings,
     patchCandidates: input.patchCandidates,
+    patchExecutions: input.patchExecutions,
     manifest,
   });
   const metrics = buildBenchmarkMetrics({
@@ -134,7 +152,9 @@ export function buildEvalReport(input: {
     ledger,
   });
   const gates = buildEvalGates(metrics, patchScores, thresholds);
-  const patchDiagnostics = patchScores.map((score) => buildPatchDiagnostic(score, candidatesById.get(score.candidateId)));
+  const patchDiagnostics = patchScores.map((score) =>
+    buildPatchDiagnostic(score, candidatesById.get(score.candidateId), input.patchExecutions?.[score.candidateId])
+  );
   const trace = buildEvalTrace({
     repo,
     generatedAt,
@@ -248,8 +268,9 @@ export function formatEvalReportMarkdown(report: EvalReport): string {
         diagnostic.score.toString(),
         diagnostic.changedLines.toString(),
         diagnostic.riskFlags.length > 0 ? diagnostic.riskFlags.join(", ") : "none",
+        formatExecutionSummary(diagnostic.execution),
       ])
-    : [["-", "-", "No patch candidates supplied", "-", "-", "-"]];
+    : [["-", "-", "No patch candidates supplied", "-", "-", "-", "-"]];
 
   return [
     `# Scout Eval Report`,
@@ -274,7 +295,7 @@ export function formatEvalReportMarkdown(report: EvalReport): string {
     markdownTable(["Severity", "Caught", "Total", "Recall"], bucketRows(report.metrics.bySeverity)),
     "",
     "## Patch Tournament Diagnostics",
-    markdownTable(["Winner", "Rank", "Candidate", "Score", "Changed Lines", "Risk Flags"], patchRows),
+    markdownTable(["Winner", "Rank", "Candidate", "Score", "Changed Lines", "Risk Flags", "Execution"], patchRows),
   ].join("\n");
 }
 
@@ -283,7 +304,8 @@ function buildEvalGates(
   patchScores: PatchScore[],
   thresholds: EvalThresholds,
 ): EvalGate[] {
-  const bestPatchScore = patchScores[0]?.score ?? 0;
+  const winningPatch = patchScores.find((score) => score.winner);
+  const bestPatchScore = winningPatch?.score ?? 0;
   return [
     {
       id: "seeded-recall",
@@ -314,29 +336,38 @@ function buildEvalGates(
       label: "Patch tournament winner",
       grade: patchScores.length === 0
         ? "warn"
-        : bestPatchScore >= thresholds.minPatchScore
+        : winningPatch && bestPatchScore >= thresholds.minPatchScore
           ? "pass"
           : "fail",
       observed: bestPatchScore,
       expected: thresholds.minPatchScore,
       detail: patchScores.length === 0
         ? "No patch candidates supplied."
-        : `${patchScores[0].candidateId} is ranked first at ${bestPatchScore}/100.`,
+        : winningPatch
+          ? `${winningPatch.candidateId} is ranked first at ${bestPatchScore}/100.`
+          : "All patch candidates were disqualified or scored below the executable threshold.",
     },
   ];
 }
 
-function buildPatchDiagnostic(score: PatchScore, candidate?: PatchCandidate): PatchTournamentDiagnostic {
+function buildPatchDiagnostic(
+  score: PatchScore,
+  candidate?: PatchCandidate,
+  execution?: PatchExecutionResult,
+): PatchTournamentDiagnostic {
   const stats = diffStats(candidate?.patch ?? "");
   const riskFlags = patchRiskFlags(score, candidate?.patch ?? "");
+  const executionDiagnostic = execution ? compactExecution(execution) : undefined;
   const strengths = [
     score.breakdown.targetsFinding >= 22 ? "targets finding file" : "",
     score.breakdown.addsProof >= 12 ? "adds executable proof" : "",
+    execution?.eligible ? "passes executable checks" : "",
     score.breakdown.scopeControl >= 14 ? "keeps scope controlled" : "",
   ].filter(Boolean);
   const weaknesses = [
     score.breakdown.targetsFinding < 22 ? "weak target fit" : "",
     score.breakdown.addsProof === 0 ? "no test proof" : "",
+    execution && !execution.eligible ? `disqualified: ${execution.disqualifiedReason ?? "missing-execution"}` : "",
     score.breakdown.regressionRisk < 14 ? "regression risk penalty" : "",
     riskFlags.length > 0 ? "manual review required" : "",
   ].filter(Boolean);
@@ -353,7 +384,26 @@ function buildPatchDiagnostic(score: PatchScore, candidate?: PatchCandidate): Pa
     riskFlags,
     strengths,
     weaknesses,
-    checksum: proofHash({ score, stats, riskFlags, strengths, weaknesses }),
+    execution: executionDiagnostic,
+    checksum: proofHash({ score, stats, riskFlags, strengths, weaknesses, execution: executionDiagnostic }),
+  };
+}
+
+function compactExecution(execution: PatchExecutionResult): PatchTournamentExecutionDiagnostic {
+  return {
+    eligible: execution.eligible,
+    disqualifiedReason: execution.disqualifiedReason,
+    apply: compactCommand(execution.apply),
+    checks: execution.checks.map(compactCommand),
+  };
+}
+
+function compactCommand(command: PatchExecutionResult["apply"]): CompactCommandSummary {
+  return {
+    command: command.command,
+    exitCode: command.exitCode,
+    durationMs: command.durationMs,
+    summary: command.summary,
   };
 }
 
@@ -437,6 +487,13 @@ function markdownTable(headers: string[], rows: string[][]) {
 
 function escapeCell(value: string) {
   return value.replace(/\|/g, "\\|");
+}
+
+function formatExecutionSummary(execution?: PatchTournamentExecutionDiagnostic) {
+  if (!execution) return "not run";
+  if (!execution.eligible) return execution.disqualifiedReason ?? "disqualified";
+  if (execution.checks.length === 0) return "applied";
+  return `${execution.checks.filter((check) => check.exitCode === 0).length}/${execution.checks.length} checks passed`;
 }
 
 function ratio(numerator: number, denominator: number) {

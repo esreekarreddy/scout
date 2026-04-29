@@ -124,3 +124,66 @@ export interface TournamentReceipt {
   handoff: TournamentHandoff;
   checksum: string;
 }
+
+export type ScoutGraphNodeKind =
+  | "repo"
+  | "file"
+  | "finding"
+  | "test"
+  | "patch"
+  | "gate"
+  | "trace-entry"
+  | "receipt";
+
+export type ScoutGraphEdgeKind = "cites" | "fixes" | "proves" | "scores" | "summarizes";
+
+export interface ScoutGraphReference {
+  file?: string;
+  line?: number;
+  checksum?: string;
+}
+
+export interface ScoutGraphNode {
+  id: string;
+  kind: ScoutGraphNodeKind;
+  label: string;
+  summary: string;
+  weight: number;
+  refs?: ScoutGraphReference[];
+  metadata?: Record<string, string | number | boolean | string[] | null>;
+}
+
+export interface ScoutGraphEdge {
+  id: string;
+  kind: ScoutGraphEdgeKind;
+  from: string;
+  to: string;
+  label: string;
+  weight: number;
+  metadata?: Record<string, string | number | boolean | string[] | null>;
+}
+
+export interface ScoutEvidenceGraph {
+  id: string;
+  repo: string;
+  generatedAt: string;
+  nodes: ScoutGraphNode[];
+  edges: ScoutGraphEdge[];
+  entrypoints: {
+    repo: string;
+    receipt?: string;
+    winningPatch?: string;
+    criticalFindings: string[];
+  };
+  checksum: string;
+}
+
+export interface ScoutGraphNeighborhood {
+  graphId: string;
+  seedNodeIds: string[];
+  nodes: ScoutGraphNode[];
+  edges: ScoutGraphEdge[];
+  omittedNodeCount: number;
+  context: string;
+  checksum: string;
+}
