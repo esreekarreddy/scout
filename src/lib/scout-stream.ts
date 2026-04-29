@@ -20,7 +20,8 @@ export async function streamAgent(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repo, aspect, modelProfile }),
   });
-  if (!res.ok || !res.body) throw new Error(`API error ${res.status}`);
+  if (!res.ok) throw new Error(await responseErrorMessage(res));
+  if (!res.body) throw new Error("API error: empty review stream");
   const model = res.headers.get("X-Scout-Model") ?? undefined;
   const contextBudget = contextBudgetFromHeaders(res.headers);
   let usageTelemetry: ReturnType<typeof parseContextUsageTelemetryLine>;
@@ -62,6 +63,23 @@ export async function streamAgent(
     if (f) onFinding(f);
   }
   return { model, contextBudget: mergeContextUsageTelemetry(contextBudget, usageTelemetry) };
+}
+
+async function responseErrorMessage(res: Response) {
+  const fallback = `API error ${res.status}`;
+  const text = await res.text().catch(() => "");
+  if (!text) return fallback;
+
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown };
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
+      return `API error ${res.status}: ${parsed.error}`;
+    }
+  } catch {
+    return `API error ${res.status}: ${text.slice(0, 240)}`;
+  }
+
+  return fallback;
 }
 
 /**

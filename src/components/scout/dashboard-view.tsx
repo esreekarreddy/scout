@@ -37,6 +37,7 @@ export function DashboardView({
   agents,
   allDone,
   onReset,
+  onRunSeededDemo,
   onFix,
 }: {
   repo: string;
@@ -44,9 +45,11 @@ export function DashboardView({
   agents: AgentState[];
   allDone: boolean;
   onReset: () => void;
+  onRunSeededDemo: () => void;
   onFix: (f: Finding) => void;
 }) {
   const [openPromptIdx, setOpenPromptIdx] = useState<number | null>(null);
+  const [dismissedLiveNotice, setDismissedLiveNotice] = useState(false);
   const allFindings = agents.flatMap((a) => a.findings);
   const judgedFindings = judgeFindings(allFindings);
   const score = calcHealth(judgedFindings);
@@ -55,6 +58,8 @@ export function DashboardView({
   const isDemo = isDemoRepo(repo);
   const runningCount = agents.filter((a) => a.status === "running").length;
   const doneCount = agents.filter((a) => a.status === "done").length;
+  const erroredAgents = agents.filter((a) => a.status === "error");
+  const showLiveConfigNotice = !isDemo && allDone && erroredAgents.length === agents.length && !dismissedLiveNotice;
   const scorecardTitle = liveTargetStats.enabled
     ? "Live target answer key"
     : isDemo
@@ -149,6 +154,16 @@ export function DashboardView({
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <TopBar repo={repo} modelProfile={modelProfile} onReset={onReset} />
+      {showLiveConfigNotice && (
+        <LiveConfigNotice
+          message={summarizeLiveError(erroredAgents)}
+          onClose={() => setDismissedLiveNotice(true)}
+          onRunSeededDemo={() => {
+            setDismissedLiveNotice(true);
+            onRunSeededDemo();
+          }}
+        />
+      )}
 
       <main style={{ flex: 1, maxWidth: 1320, margin: "0 auto", width: "100%", padding: "28px 24px" }}>
         {/* [SLOT-2C] · Tier-2 Task 2C: Trend sparkline goes here */}
@@ -283,6 +298,92 @@ export function DashboardView({
           </div>
         </details>
       </main>
+    </div>
+  );
+}
+
+function summarizeLiveError(agents: AgentState[]) {
+  const message = agents.map((agent) => agent.errorMessage).find(Boolean) ?? "";
+  if (message.includes("503") || message.includes("live model calls are not configured")) {
+    return "The live OpenAI key is not configured for this deployment. The seeded demo still works without any API keys.";
+  }
+  if (message.includes("502") || message.includes("repository context unavailable")) {
+    return "Scout could not read the public GitHub repo context. The GitHub token may be missing, rotated, or rate limited.";
+  }
+  return "Live review is unavailable right now. The OpenAI or GitHub key may have been rotated or taken down.";
+}
+
+function LiveConfigNotice({
+  message,
+  onClose,
+  onRunSeededDemo,
+}: {
+  message: string;
+  onClose: () => void;
+  onRunSeededDemo: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="live-config-title"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "grid",
+        placeItems: "center",
+        padding: 20,
+        background: "rgba(16, 24, 40, 0.28)",
+      }}
+    >
+      <div
+        className="card"
+        style={{
+          width: "min(460px, 100%)",
+          padding: 22,
+          borderColor: "var(--amber)",
+          boxShadow: "0 18px 70px rgba(16, 24, 40, 0.22)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
+          <div>
+            <p id="live-config-title" style={{ fontSize: 16, fontWeight: 850, marginBottom: 7 }}>
+              Live review is offline
+            </p>
+            <p style={{ color: "var(--ink-2)", fontSize: 14, lineHeight: 1.55 }}>
+              {message}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close live review notice"
+            onClick={onClose}
+            style={{
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--ink-2)",
+              borderRadius: 6,
+              width: 30,
+              height: 30,
+              cursor: "pointer",
+              fontWeight: 850,
+              flexShrink: 0,
+            }}
+          >
+            x
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+          <button type="button" className="btn-primary" onClick={onRunSeededDemo}>
+            Run seeded demo
+          </button>
+          <button type="button" className="btn-ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

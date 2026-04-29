@@ -39,6 +39,10 @@ export default function Home() {
           reset();
           closeFixers();
         }}
+        onRunSeededDemo={() => {
+          closeFixers();
+          void launchDemo();
+        }}
         onFix={launchFixers}
       />
 

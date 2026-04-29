@@ -44,7 +44,7 @@ export function useScoutRun() {
     if (!targetRepo.trim()) return;
     setRepo(targetRepo);
     setStage("scanning");
-    setAgents(initAgents().map((a) => ({ ...a, status: "running" })));
+    setAgents(initAgents().map((a) => ({ ...a, status: "running", errorMessage: undefined })));
     findingIdRef.current = 0;
 
     await Promise.allSettled(
@@ -83,8 +83,9 @@ export function useScoutRun() {
                 : a,
             ),
           );
-        } catch {
+        } catch (error) {
           setAgentField(idx, "status", "error");
+          setAgentField(idx, "errorMessage", error instanceof Error ? error.message : "Live review failed.");
         }
       }),
     );

@@ -37,6 +37,7 @@ export interface AgentState {
   label: string;
   description: string;
   status: AgentStatus;
+  errorMessage?: string;
   /** Raw streaming text (think-aloud analysis) */
   raw: string;
   findings: Finding[];

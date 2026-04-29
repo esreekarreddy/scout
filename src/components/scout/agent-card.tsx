@@ -147,7 +147,7 @@ export function AgentCard({
             {agent.status === "idle"    && "Waiting..."}
             {agent.status === "running" && "Analysing..."}
             {agent.status === "done"    && "No findings."}
-            {agent.status === "error"   && "Agent error."}
+            {agent.status === "error"   && (agent.errorMessage ?? "Agent error.")}
           </p>
         </div>
       )}
