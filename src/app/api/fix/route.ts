@@ -4,7 +4,15 @@ import { fetchRepoContext } from "@/lib/github";
 import { FIX_STRATEGIES, buildFixMessage } from "@/lib/prompts";
 import { getDemoFixPatch, isDemoRepo } from "@/lib/demo-fixtures";
 import { normalizeModelProfile, selectModel } from "@/lib/model-policy";
-import type { Finding, FixStrategy, ScoutModelProfile } from "@/lib/types";
+import {
+  apiErrorResponse,
+  apiHeaders,
+  assertRateLimit,
+  assertTrustedOrigin,
+  parseFixRequest,
+  readJsonRequest,
+  requireOpenAIKey,
+} from "@/lib/api-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,39 +23,42 @@ export const maxDuration = 60;
  * Each call streams a unified diff back as text.
  */
 export async function POST(req: Request) {
-  const { repo, finding, strategy, modelProfile } = (await req.json()) as {
-    repo: string;
-    finding: Finding;
-    strategy: FixStrategy;
-    modelProfile?: ScoutModelProfile;
-  };
-
-  const cfg = FIX_STRATEGIES.find((s) => s.key === strategy);
-  if (!cfg) return new Response("Unknown strategy", { status: 400 });
-
-  if (isDemoRepo(repo)) {
-    return streamPlainText(getDemoFixPatch(finding.title, strategy), 16);
-  }
-
-  let repoContext = "";
   try {
-    repoContext = await fetchRepoContext(repo);
-  } catch {
-    repoContext = "// Could not fetch repo context.";
+    assertTrustedOrigin(req);
+    assertRateLimit(req, "fix", 24);
+    const { repo, finding, strategy, modelProfile } = parseFixRequest(await readJsonRequest(req));
+
+    const cfg = FIX_STRATEGIES.find((s) => s.key === strategy);
+    if (!cfg) return new Response("Unknown strategy", { status: 400, headers: apiHeaders() });
+
+    if (isDemoRepo(repo)) {
+      return streamPlainText(getDemoFixPatch(finding.title, strategy), 16);
+    }
+
+    requireOpenAIKey();
+
+    let repoContext = "";
+    try {
+      repoContext = await fetchRepoContext(repo);
+    } catch {
+      repoContext = "// Could not fetch public GitHub repository context.";
+    }
+
+    const profile = normalizeModelProfile(modelProfile);
+    const model = selectModel({ profile, task: "fix", fallback: process.env.OPENAI_MODEL });
+    const result = streamText({
+      model: openai(model),
+      system: cfg.system,
+      messages: [{ role: "user", content: buildFixMessage(repoContext, finding) }],
+    });
+
+    return streamPlainText(result.textStream, 0, {
+      "X-Scout-Model": model,
+      "X-Scout-Model-Profile": profile ?? "env",
+    });
+  } catch (error) {
+    return apiErrorResponse(error);
   }
-
-  const profile = normalizeModelProfile(modelProfile);
-  const model = selectModel({ profile, task: "fix", fallback: process.env.OPENAI_MODEL });
-  const result = streamText({
-    model: openai(model),
-    system: cfg.system,
-    messages: [{ role: "user", content: buildFixMessage(repoContext, finding) }],
-  });
-
-  return streamPlainText(result.textStream, 0, {
-    "X-Scout-Model": model,
-    "X-Scout-Model-Profile": profile ?? "env",
-  });
 }
 
 function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0, headers: Record<string, string> = {}) {
@@ -70,6 +81,6 @@ function streamPlainText(source: AsyncIterable<string> | string, delayMs = 0, he
   });
 
   return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8", ...headers },
+    headers: apiHeaders({ "Content-Type": "text/plain; charset=utf-8", ...headers }),
   });
 }

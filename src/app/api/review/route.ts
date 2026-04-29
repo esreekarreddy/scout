@@ -5,62 +5,74 @@ import { AGENTS, buildReviewMessage } from "@/lib/prompts";
 import { getDemoReviewStream, isDemoRepo } from "@/lib/demo-fixtures";
 import { normalizeModelProfile, selectModel } from "@/lib/model-policy";
 import { buildContextBudget, buildPromptCacheKey, contextBudgetHeaders, encodeContextUsageTelemetry } from "@/lib/context-budget";
-import type { Aspect, ScoutModelProfile } from "@/lib/types";
+import {
+  apiErrorResponse,
+  apiHeaders,
+  assertRateLimit,
+  assertTrustedOrigin,
+  parseReviewRequest,
+  readJsonRequest,
+  requireOpenAIKey,
+} from "@/lib/api-security";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  const { repo, aspect, modelProfile } = (await req.json()) as {
-    repo: string;
-    aspect: Aspect;
-    modelProfile?: ScoutModelProfile;
-  };
-
-  const agent = AGENTS.find((a) => a.aspect === aspect);
-  if (!agent) return new Response("Unknown aspect", { status: 400 });
-
-  if (isDemoRepo(repo)) {
-    const model = "deterministic-seed";
-    const budget = buildContextBudget({
-      repoContext: getDemoContextForBudget(),
-      model,
-      modelProfile: "env",
-    });
-    return streamPlainText(getDemoReviewStream(aspect), 28, {
-      "X-Scout-Model": model,
-      "X-Scout-Model-Profile": "demo",
-      ...contextBudgetHeaders(budget),
-    });
-  }
-
-  let repoContext = "";
   try {
-    repoContext = await fetchRepoContext(repo);
-  } catch {
-    repoContext = `// Could not fetch ${repo}. Add GITHUB_TOKEN to .env.local for higher rate limits.`;
-  }
+    assertTrustedOrigin(req);
+    assertRateLimit(req, "review", 18);
+    const { repo, aspect, modelProfile } = parseReviewRequest(await readJsonRequest(req));
 
-  const profile = normalizeModelProfile(modelProfile);
-  const model = selectModel({ profile, task: "review", fallback: process.env.OPENAI_MODEL });
-  const promptCacheKey = buildPromptCacheKey("review", aspect);
-  const budget = buildContextBudget({ repoContext, model, modelProfile: profile ?? "env", promptCacheKey });
-  const result = streamText({
-    model: openai(model),
-    system: agent.system,
-    messages: [{ role: "user", content: buildReviewMessage(repoContext) }],
-    providerOptions: {
-      openai: {
-        promptCacheKey,
+    const agent = AGENTS.find((a) => a.aspect === aspect);
+    if (!agent) return new Response("Unknown aspect", { status: 400, headers: apiHeaders() });
+
+    if (isDemoRepo(repo)) {
+      const model = "deterministic-seed";
+      const budget = buildContextBudget({
+        repoContext: getDemoContextForBudget(),
+        model,
+        modelProfile: "env",
+      });
+      return streamPlainText(getDemoReviewStream(aspect), 28, {
+        "X-Scout-Model": model,
+        "X-Scout-Model-Profile": "demo",
+        ...contextBudgetHeaders(budget),
+      });
+    }
+
+    requireOpenAIKey();
+
+    let repoContext = "";
+    try {
+      repoContext = await fetchRepoContext(repo);
+    } catch {
+      repoContext = "// Could not fetch public GitHub repository context.";
+    }
+
+    const profile = normalizeModelProfile(modelProfile);
+    const model = selectModel({ profile, task: "review", fallback: process.env.OPENAI_MODEL });
+    const promptCacheKey = buildPromptCacheKey("review", aspect);
+    const budget = buildContextBudget({ repoContext, model, modelProfile: profile ?? "env", promptCacheKey });
+    const result = streamText({
+      model: openai(model),
+      system: agent.system,
+      messages: [{ role: "user", content: buildReviewMessage(repoContext) }],
+      providerOptions: {
+        openai: {
+          promptCacheKey,
+        },
       },
-    },
-  });
+    });
 
-  return streamPlainText(result.textStream, 0, {
-    "X-Scout-Model": model,
-    "X-Scout-Model-Profile": profile ?? "env",
-    ...contextBudgetHeaders(budget),
-  }, result.totalUsage);
+    return streamPlainText(result.textStream, 0, {
+      "X-Scout-Model": model,
+      "X-Scout-Model-Profile": profile ?? "env",
+      ...contextBudgetHeaders(budget),
+    }, result.totalUsage);
+  } catch (error) {
+    return apiErrorResponse(error);
+  }
 }
 
 function getDemoContextForBudget() {
@@ -103,6 +115,6 @@ function streamPlainText(
   });
 
   return new Response(stream, {
-    headers: { "Content-Type": "text/plain; charset=utf-8", ...headers },
+    headers: apiHeaders({ "Content-Type": "text/plain; charset=utf-8", ...headers }),
   });
 }

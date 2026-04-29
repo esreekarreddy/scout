@@ -1,4 +1,5 @@
 import { DEMO_REPO_CONTEXT, isDemoRepo } from "./demo-fixtures";
+import { parseStrictGitHubUrl } from "./api-security";
 import type { RepoFileInput } from "./patch-executor";
 
 const BASE = "https://api.github.com";
@@ -14,16 +15,14 @@ function ghHeaders(): Record<string, string> {
   return h;
 }
 
-/** Parse https://github.com/owner/repo - { owner, repo } */
 export function parseGitHubUrl(
   url: string
 ): { owner: string; repo: string } | null {
-  const m = url.match(/github\.com\/([^/]+)\/([^/?#]+)/);
-  if (!m) return null;
-  return { owner: m[1], repo: m[2].replace(/\.git$/, "") };
+  return parseStrictGitHubUrl(url);
 }
 
 type GHEntry = { name: string; path: string; type: "file" | "dir"; size: number };
+type GHRepoMeta = { default_branch?: string; private?: boolean };
 type GHTreeEntry = {
   path: string;
   type: "blob" | "tree" | "commit";
@@ -43,12 +42,14 @@ export async function fetchRepoContext(repoUrl: string): Promise<string> {
 
   const { owner, repo } = parsed;
   const headers = ghHeaders();
+  const meta = await fetchPublicRepoMeta(owner, repo, headers);
+  if (!meta) return "// Could not fetch public GitHub repository metadata.";
 
-  const treeContext = await fetchBoundedTreeContext(owner, repo, headers);
+  const treeContext = await fetchBoundedTreeContext(owner, repo, headers, meta);
   if (treeContext) return treeContext;
 
   // 1. Root contents
-  const rootRes = await fetch(`${BASE}/repos/${owner}/${repo}/contents`, {
+  const rootRes = await githubFetch(`${BASE}/repos/${owner}/${repo}/contents`, {
     headers,
     next: { revalidate: 300 },
   });
@@ -77,7 +78,7 @@ export async function fetchRepoContext(repoUrl: string): Promise<string> {
 
   // Also look one level into src/
   if (srcDir) {
-    const srcRes = await fetch(
+    const srcRes = await githubFetch(
       `${BASE}/repos/${owner}/${repo}/contents/${srcDir.path}`,
       { headers, next: { revalidate: 300 } }
     );
@@ -111,7 +112,10 @@ export async function fetchRepoFiles(repoUrl: string): Promise<RepoFileInput[]> 
 
   const { owner, repo } = parsed;
   const headers = ghHeaders();
-  const tree = await fetchInspectableTree(owner, repo, headers);
+  const meta = await fetchPublicRepoMeta(owner, repo, headers);
+  if (!meta) return [];
+
+  const tree = await fetchInspectableTree(owner, repo, headers, meta);
   if (!tree) return [];
 
   const files: RepoFileInput[] = [];
@@ -126,8 +130,9 @@ async function fetchBoundedTreeContext(
   owner: string,
   repo: string,
   headers: Record<string, string>,
+  meta: GHRepoMeta,
 ): Promise<string | null> {
-  const tree = await fetchInspectableTree(owner, repo, headers);
+  const tree = await fetchInspectableTree(owner, repo, headers, meta);
   if (!tree) return null;
 
   const sections: string[] = [];
@@ -151,16 +156,10 @@ async function fetchInspectableTree(
   owner: string,
   repo: string,
   headers: Record<string, string>,
+  meta: GHRepoMeta,
 ): Promise<{ files: GHTreeEntry[]; truncated: boolean } | null> {
-  const metaRes = await fetch(`${BASE}/repos/${owner}/${repo}`, {
-    headers,
-    next: { revalidate: 300 },
-  });
-  if (!metaRes.ok) return null;
-
-  const meta: { default_branch?: string } = await metaRes.json();
   const branch = meta.default_branch ?? "main";
-  const treeRes = await fetch(
+  const treeRes = await githubFetch(
     `${BASE}/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     { headers, next: { revalidate: 300 } },
   );
@@ -173,6 +172,22 @@ async function fetchInspectableTree(
     .slice(0, MAX_FILES);
 
   return { files, truncated: data.truncated ?? false };
+}
+
+async function fetchPublicRepoMeta(
+  owner: string,
+  repo: string,
+  headers: Record<string, string>,
+): Promise<GHRepoMeta | null> {
+  const metaRes = await githubFetch(`${BASE}/repos/${owner}/${repo}`, {
+    headers,
+    next: { revalidate: 300 },
+  });
+  if (!metaRes.ok) return null;
+
+  const meta: GHRepoMeta = await metaRes.json();
+  if (meta.private) return null;
+  return meta;
 }
 
 function repoHeader(owner: string, repo: string) {
@@ -208,7 +223,7 @@ async function fetchFileText(
   path: string,
   headers: Record<string, string>
 ): Promise<string | null> {
-  const res = await fetch(`${BASE}/repos/${owner}/${repo}/contents/${path}`, {
+  const res = await githubFetch(`${BASE}/repos/${owner}/${repo}/contents/${path}`, {
     headers,
     next: { revalidate: 300 },
   });
@@ -216,6 +231,16 @@ async function fetchFileText(
   const data: { content?: string } = await res.json();
   if (!data.content) return null;
   return Buffer.from(data.content, "base64").toString("utf-8");
+}
+
+async function githubFetch(url: string, init: RequestInit & { next?: { revalidate: number } }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function contextToRepoFiles(context: string): RepoFileInput[] {

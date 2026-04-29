@@ -8,6 +8,12 @@ import {
   mergeContextUsageTelemetry,
   parseContextUsageTelemetryLine,
 } from "../src/lib/context-budget";
+import {
+  assertTrustedOrigin,
+  parseReviewRequest,
+  parseStrictGitHubUrl,
+  readJsonRequest,
+} from "../src/lib/api-security";
 import { buildEvalReport, formatEvalReportMarkdown } from "../src/lib/eval";
 import { patchMetadataFromDiff, validateLiveFinding, validateLiveFixerPatch } from "../src/lib/live-schemas";
 import { calcEvalScore, judgeFindings } from "../src/lib/judge";
@@ -39,6 +45,7 @@ async function main() {
   testContextUsageTelemetry();
   testStructuredFindingParserAndLiveTargetStats();
   testGeneratedArtifactHygiene();
+  await testApiSecurity();
 
   stdout.write(JSON.stringify({
     ok: true,
@@ -52,9 +59,66 @@ async function main() {
       "context-usage-telemetry",
       "structured-live-target-stats",
       "generated-artifact-hygiene",
+      "api-security",
     ],
   }, null, 2));
   stdout.write("\n");
+}
+
+async function testApiSecurity() {
+  assert(
+    parseStrictGitHubUrl("https://github.com/esreekarreddy/scout-target-repo")?.repo === "scout-target-repo",
+    "strict GitHub parser must accept canonical public repo URLs",
+  );
+  assert(parseStrictGitHubUrl("https://github.com/esreekarreddy/scout-target-repo.git")?.repo === "scout-target-repo", "strict GitHub parser must accept .git suffix");
+  assert(parseStrictGitHubUrl("http://github.com/esreekarreddy/scout-target-repo") === null, "strict GitHub parser must reject non-https URLs");
+  assert(parseStrictGitHubUrl("https://evil.test/?next=github.com/esreekarreddy/scout-target-repo") === null, "strict GitHub parser must reject embedded GitHub URLs");
+  assert(parseStrictGitHubUrl("https://github.com/esreekarreddy/scout-target-repo/issues") === null, "strict GitHub parser must reject nested GitHub paths");
+
+  const parsed = parseReviewRequest({
+    repo: "demo://ai-written-code-seed",
+    aspect: "hallucination",
+    modelProfile: "fast",
+  });
+  assert(parsed.aspect === "hallucination", "review API schema must accept valid seeded payloads");
+
+  assertThrows(() => parseReviewRequest({
+    repo: "https://evil.test/github.com/esreekarreddy/scout-target-repo",
+    aspect: "hallucination",
+  }), "review API schema must reject non-GitHub repo URLs");
+
+  assertThrows(() => assertTrustedOrigin(new Request("https://scout.sreekarreddy.com/api/review", {
+    method: "POST",
+    headers: {
+      Origin: "https://attacker.test",
+      Host: "scout.sreekarreddy.com",
+    },
+  })), "origin guard must reject cross-origin browser calls");
+
+  const body = await readJsonRequest(new Request("https://scout.sreekarreddy.com/api/review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok: true }),
+  }));
+  assert((body as { ok?: boolean }).ok === true, "JSON reader must parse valid application/json bodies");
+
+  await assertRejects(
+    () => readJsonRequest(new Request("https://scout.sreekarreddy.com/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: "{}",
+    })),
+    "JSON reader must reject non-json content types",
+  );
+
+  await assertRejects(
+    () => readJsonRequest(new Request("https://scout.sreekarreddy.com/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payload: "x".repeat(64) }),
+    }), 32),
+    "JSON reader must reject oversized bodies even without trusting app code",
+  );
 }
 
 function testStructuredFindingParserAndLiveTargetStats() {
@@ -578,6 +642,24 @@ function finding(input: {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function assertThrows(fn: () => unknown, message: string) {
+  try {
+    fn();
+  } catch {
+    return;
+  }
+  throw new Error(message);
+}
+
+async function assertRejects(fn: () => Promise<unknown>, message: string) {
+  try {
+    await fn();
+  } catch {
+    return;
+  }
+  throw new Error(message);
 }
 
 main().catch((error) => {
